@@ -25,6 +25,11 @@ of tools. It refuses to continue during an active or paused print. Before
 editing either main configuration file, it asks separately whether each managed
 include may be added automatically.
 
+The installer treats everything from Klipper's `SAVE_CONFIG` marker to the end
+of `printer.cfg` as protected calibration data. Automatic install and uninstall
+verify that this tail remains byte-for-byte identical and abort before writing
+if it changes.
+
 The application directory is a clean Git clone owned by the printer user. If
 Update Manager integration is accepted, Moonraker manages it as a `git_repo`
 extension and restarts both `medusahc-control` and Klipper after an update.

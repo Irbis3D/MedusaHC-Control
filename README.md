@@ -59,6 +59,11 @@ alongside Klipper and Moonraker. Declining either edit keeps installation
 working and prints the exact manual configuration. See `INSTALLER.md` for
 command-line update, status and uninstall commands.
 
+Installer-managed edits to `printer.cfg` are restricted to the area above
+Klipper's `SAVE_CONFIG` marker. The complete auto-generated calibration tail is
+verified unchanged before the file is written during both installation and
+uninstall.
+
 ## Update
 
 Use the **Update** button for MedusaHC Control in the Mainsail Update Manager.

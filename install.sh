@@ -223,10 +223,15 @@ block = f"{begin}\n[include medusahc_control.cfg]\n{end}\n"
 if begin in text:
     raise SystemExit(0)
 marker = "#*# <---------------------- SAVE_CONFIG ---------------------->"
+saved_tail = text[text.index(marker):] if marker in text else None
 if marker in text:
     text = text.replace(marker, block + marker, 1)
 else:
     text = text.rstrip() + "\n\n" + block
+if saved_tail is not None:
+    new_tail = text[text.index(marker):]
+    if new_tail != saved_tail:
+        raise SystemExit("Refusing to write printer.cfg: SAVE_CONFIG data changed")
 path.write_text(text, encoding="utf-8")
 PY
 }
@@ -240,8 +245,14 @@ path = Path(sys.argv[1])
 begin, end = sys.argv[2:4]
 text = path.read_text(encoding="utf-8")
 block = f"{begin}\n[include medusahc_control.cfg]\n{end}\n"
-text = text.replace(block, "", 1)
-path.write_text(text, encoding="utf-8")
+marker = "#*# <---------------------- SAVE_CONFIG ---------------------->"
+saved_tail = text[text.index(marker):] if marker in text else None
+updated = text.replace(block, "", 1)
+if saved_tail is not None:
+    new_tail = updated[updated.index(marker):]
+    if new_tail != saved_tail:
+        raise SystemExit("Refusing to write printer.cfg: SAVE_CONFIG data changed")
+path.write_text(updated, encoding="utf-8")
 PY
 }
 
@@ -702,11 +713,15 @@ self_test() {
   [[ "$(grep -Fc "${MANAGED_BEGIN}" "${printer_cfg}")" -eq 1 ]] || die "Managed include was not inserted exactly once."
   write_managed_include
   [[ "$(grep -Fc "${MANAGED_BEGIN}" "${printer_cfg}")" -eq 1 ]] || die "Managed include is not idempotent."
-  python3 - "${printer_cfg}" "${MANAGED_BEGIN}" <<'PY'
+  python3 - "${printer_cfg}" "${original}" "${MANAGED_BEGIN}" <<'PY'
 from pathlib import Path
 import sys
 text = Path(sys.argv[1]).read_text(encoding="utf-8")
-assert text.index(sys.argv[2]) < text.index("#*# <---------------------- SAVE_CONFIG ---------------------->")
+original = Path(sys.argv[2]).read_text(encoding="utf-8")
+begin = sys.argv[3]
+marker = "#*# <---------------------- SAVE_CONFIG ---------------------->"
+assert text.index(begin) < text.index(marker)
+assert text[text.index(marker):] == original[original.index(marker):]
 PY
   remove_managed_include
   cmp -s "${printer_cfg}" "${original}" || die "Managed include removal did not restore printer.cfg."
