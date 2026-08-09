@@ -41,7 +41,7 @@ TOOL_SETTINGS: tuple[dict[str, Any], ...] = (
 
 
 def schema_for(tool_count: int) -> list[dict[str, Any]]:
-    setup_groups = {"Layout", "Feeder", "Calibration"}
+    setup_groups = {"Layout", "Feeder", "Calibration", "Cleaning and priming", "Motion"}
     schema = [
         {**dict(item), "page": "setup" if item["group"] in setup_groups else "tuning"}
         for item in BASE_SETTINGS
