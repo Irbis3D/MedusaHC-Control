@@ -53,17 +53,23 @@ curl -fsSL https://raw.githubusercontent.com/Irbis3D/MedusaHC-Control/main/insta
 The installer detects the existing Klipper and `printer_data` paths, creates a
 backup and asks one question before changing `printer.cfg`. It then adds the
 read-only sensor adapter, starts the isolated dashboard service and connects it
-to the local Moonraker instance. See `INSTALLER.md` for update, status and
-uninstall commands.
+to the local Moonraker instance. It also registers MedusaHC Control in the
+Moonraker Update Manager so updates appear in Mainsail alongside Klipper and
+Moonraker. See `INSTALLER.md` for command-line update, status and uninstall
+commands.
 
 ## Update
+
+Use the **Update** button for MedusaHC Control in the Mainsail Update Manager.
+Moonraker updates the clean Git repository and restarts MedusaHC Control and
+Klipper. The command below remains available as an SSH recovery alternative:
 
 ```text
 curl -fsSL https://raw.githubusercontent.com/Irbis3D/MedusaHC-Control/main/install-online.sh | sudo bash -s -- update
 ```
 
-The update keeps the dashboard configuration, statistics, setting history and
-installer backups, replaces the application code and restarts the service.
+Both methods keep the dashboard configuration, statistics, setting history and
+installer backups.
 
 ## Uninstall completely
 
@@ -71,10 +77,11 @@ installer backups, replaces the application code and restarts the service.
 curl -fsSL https://raw.githubusercontent.com/Irbis3D/MedusaHC-Control/main/install-online.sh | sudo bash -s -- uninstall --purge
 ```
 
-The uninstaller asks for confirmation, removes all installer-owned files and
-Klipper integration, purges dashboard data and restarts Klipper. Values that a
-user deliberately saved into their own MedusaHC configuration remain user data
-and are not reverted automatically.
+The uninstaller asks for confirmation, removes all installer-owned files,
+Klipper integration and Moonraker Update Manager registration, purges dashboard
+data and restarts Klipper and Moonraker. Values that a user deliberately saved
+into their own MedusaHC configuration remain user data and are not reverted
+automatically.
 
 ## Safety status
 

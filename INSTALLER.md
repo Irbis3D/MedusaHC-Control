@@ -1,7 +1,8 @@
 # MedusaHC Control installer
 
 The dashboard is packaged as an isolated local service. It does not modify
-Mainsail, Moonraker, nginx or existing MedusaHC macros.
+Mainsail, nginx or existing MedusaHC macros. It adds one marked include to
+Moonraker so the dashboard appears in the standard Update Manager.
 
 ## Install on an existing working MedusaHC printer
 
@@ -22,6 +23,10 @@ The installer detects the printer user, `printer_data`, Klipper and the number
 of tools. It refuses to continue during an active or paused print. Before
 editing `printer.cfg`, it asks separately whether the managed include may be
 added automatically.
+
+The application directory is a clean Git clone owned by the printer user.
+Moonraker manages it as a `git_repo` extension and restarts both
+`medusahc-control` and Klipper after an update.
 
 Tool count is never hard-coded by the installer or dashboard. The running panel
 reads `GLOBAL_STATE.variable_max_tool` and dynamically creates T0 through the
@@ -82,13 +87,16 @@ curl -fsSL https://raw.githubusercontent.com/Irbis3D/MedusaHC-Control/main/insta
 
 ## Files owned by the installer
 
-- `/opt/medusahc-control` — read-only application files.
+- `~/medusahc-control` — clean application Git repository owned by the printer user.
 - `/var/lib/medusahc-control` — configuration, statistics, manifest and backups.
 - `/etc/systemd/system/medusahc-control.service` — one isolated service.
 - `klippy/extras/mhc_dashboard.py` — a symlink to the read-only sensor adapter.
 - `printer_data/config/medusahc_control.cfg` — one small Klipper section.
 - One marked include block in `printer.cfg`, always inserted before
   `SAVE_CONFIG` and removed by the uninstaller.
+- `printer_data/config/medusahc-control-update.cfg` — Moonraker updater section.
+- One marked include in `moonraker.conf` and one exact service entry in
+  `printer_data/moonraker.asvc`, both removed by the uninstaller.
 
 Permanent changes made through **Save to config** are user data and are not
 reverted by uninstall. Each such change has its own timestamped backup in the

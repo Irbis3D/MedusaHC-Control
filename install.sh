@@ -2,13 +2,18 @@
 set -euo pipefail
 
 APP_NAME="medusahc-control"
-APP_DIR="/opt/${APP_NAME}"
+APP_DIR=""
+LEGACY_APP_DIR="/opt/${APP_NAME}"
 STATE_DIR="/var/lib/${APP_NAME}"
 SERVICE_FILE="/etc/systemd/system/${APP_NAME}.service"
+REPOSITORY_URL="https://github.com/Irbis3D/MedusaHC-Control.git"
+PRIMARY_BRANCH="main"
 CONFIG_FILE="${STATE_DIR}/config.json"
 MANIFEST_FILE="${STATE_DIR}/install-state.env"
 MANAGED_BEGIN="# >>> MEDUSAHC CONTROL >>>"
 MANAGED_END="# <<< MEDUSAHC CONTROL <<<"
+MOONRAKER_MANAGED_BEGIN="# >>> MEDUSAHC CONTROL UPDATE MANAGER >>>"
+MOONRAKER_MANAGED_END="# <<< MEDUSAHC CONTROL UPDATE MANAGER <<<"
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 
 action="install"
@@ -88,12 +93,18 @@ detect_paths() {
   install_group="$(id -gn "${install_user}")"
   install_home="$(getent passwd "${install_user}" | cut -d: -f6)"
   [[ -n "${install_home}" && -d "${install_home}" ]] || die "Cannot find the home directory for ${install_user}."
+  APP_DIR="${MEDUSAHC_APP_DIR:-${install_home}/${APP_NAME}}"
 
   config_dir="${MEDUSAHC_CONFIG_DIR:-${install_home}/printer_data/config}"
+  printer_data_dir="$(dirname -- "${config_dir}")"
   printer_cfg="${config_dir}/printer.cfg"
   variables_cfg="${config_dir}/MHC_variables.cfg"
   managed_cfg="${config_dir}/medusahc_control.cfg"
+  moonraker_cfg="${config_dir}/moonraker.conf"
+  moonraker_update_cfg="${config_dir}/medusahc-control-update.cfg"
+  moonraker_asvc="${printer_data_dir}/moonraker.asvc"
   [[ -f "${printer_cfg}" ]] || die "printer.cfg was not found at ${printer_cfg}."
+  [[ -f "${moonraker_cfg}" ]] || die "moonraker.conf was not found at ${moonraker_cfg}."
 
   klipper_dir="${MEDUSAHC_KLIPPER_DIR:-${install_home}/klipper}"
   klipper_extras="${klipper_dir}/klippy/extras"
@@ -146,6 +157,7 @@ check_sources() {
   [[ -d "${SCRIPT_DIR}/medusahc_control" ]] || die "medusahc_control package is missing next to install.sh."
   [[ -f "${SCRIPT_DIR}/printer/mhc_dashboard.py" ]] || die "printer/mhc_dashboard.py is missing."
   [[ -f "${SCRIPT_DIR}/VERSION" ]] || die "VERSION is missing next to install.sh."
+  command -v git >/dev/null 2>&1 || die "git is required."
   python3 -c 'import sys; assert sys.version_info >= (3, 9), "Python 3.9 or newer is required"'
 }
 
@@ -211,20 +223,122 @@ EOF
   chmod 0644 "${managed_cfg}"
 }
 
+write_moonraker_include() {
+  python3 - "${moonraker_cfg}" "${MOONRAKER_MANAGED_BEGIN}" "${MOONRAKER_MANAGED_END}" <<'PY'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+begin, end = sys.argv[2:4]
+text = path.read_text(encoding="utf-8")
+block = f"{begin}\n[include medusahc-control-update.cfg]\n{end}\n"
+if begin not in text:
+    if not text.endswith("\n"):
+        text += "\n"
+    text += block
+    path.write_text(text, encoding="utf-8")
+PY
+}
+
+remove_moonraker_include() {
+  python3 - "${moonraker_cfg}" "${MOONRAKER_MANAGED_BEGIN}" "${MOONRAKER_MANAGED_END}" <<'PY'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+begin, end = sys.argv[2:4]
+text = path.read_text(encoding="utf-8")
+block = f"{begin}\n[include medusahc-control-update.cfg]\n{end}\n"
+path.write_text(text.replace(block, "", 1), encoding="utf-8")
+PY
+}
+
+install_moonraker_update_manager() {
+  if grep -Eq '^[[:space:]]*\[update_manager[[:space:]]+medusahc-control\][[:space:]]*$' "${moonraker_cfg}"; then
+    die "moonraker.conf already contains an unmanaged medusahc-control updater section."
+  fi
+
+  if [[ "${dry_run}" -eq 1 ]]; then
+    log "Would create ${moonraker_update_cfg} and include it from moonraker.conf."
+    log "Would authorize ${APP_NAME} in ${moonraker_asvc}."
+    return
+  fi
+
+  cat > "${moonraker_update_cfg}" <<EOF
+# Managed by MedusaHC Control. Remove through the online uninstall command.
+[update_manager ${APP_NAME}]
+type: git_repo
+channel: dev
+path: ${APP_DIR}
+origin: ${REPOSITORY_URL}
+primary_branch: ${PRIMARY_BRANCH}
+managed_services: ${APP_NAME} klipper
+info_tags:
+    desc=Experimental MedusaHC control dashboard
+EOF
+  chown "${install_user}:${install_group}" "${moonraker_update_cfg}"
+  chmod 0644 "${moonraker_update_cfg}"
+  write_moonraker_include
+
+  touch "${moonraker_asvc}"
+  if ! grep -Fxq "${APP_NAME}" "${moonraker_asvc}"; then
+    printf '\n%s\n' "${APP_NAME}" >> "${moonraker_asvc}"
+  fi
+  chown "${install_user}:${install_group}" "${moonraker_asvc}"
+  chmod 0644 "${moonraker_asvc}"
+}
+
+remove_moonraker_update_manager() {
+  if [[ -f "${moonraker_cfg}" ]]; then
+    remove_moonraker_include
+  fi
+  rm -f -- "${moonraker_update_cfg}"
+  if [[ -f "${moonraker_asvc}" ]]; then
+    python3 - "${moonraker_asvc}" "${APP_NAME}" <<'PY'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+service = sys.argv[2]
+lines = path.read_text(encoding="utf-8").splitlines()
+path.write_text("\n".join(line for line in lines if line.strip() != service) + "\n", encoding="utf-8")
+PY
+  fi
+}
+
 install_application() {
-  run install -d -m 0755 "${APP_DIR}"
-  if [[ "${dry_run}" -eq 0 ]]; then
-    if [[ "${action}" == "update" ]]; then
-      rm -rf -- "${APP_DIR}/medusahc_control" "${APP_DIR}/printer"
+  local replacement_dir="${APP_DIR}.replacement.$$"
+  if [[ "${dry_run}" -eq 1 ]]; then
+    if [[ -d "${APP_DIR}/.git" ]]; then
+      log "Would update the Git repository at ${APP_DIR}."
+    else
+      log "Would clone ${REPOSITORY_URL} to ${APP_DIR}."
     fi
-    cp -a "${SCRIPT_DIR}/medusahc_control" "${APP_DIR}/"
-    cp -a "${SCRIPT_DIR}/printer" "${APP_DIR}/"
-    install -m 0644 "${SCRIPT_DIR}/pyproject.toml" "${APP_DIR}/pyproject.toml"
-    install -m 0644 "${SCRIPT_DIR}/VERSION" "${APP_DIR}/VERSION"
-    install -m 0644 "${SCRIPT_DIR}/README.md" "${APP_DIR}/README.md"
-    install -m 0644 "${SCRIPT_DIR}/INSTALLER.md" "${APP_DIR}/INSTALLER.md"
-    install -m 0755 "${SCRIPT_DIR}/install.sh" "${APP_DIR}/install.sh"
-    chown -R root:root "${APP_DIR}"
+  elif [[ -d "${APP_DIR}/.git" ]]; then
+    local current_origin
+    current_origin="$(runuser -u "${install_user}" -- git -C "${APP_DIR}" remote get-url origin)"
+    [[ "${current_origin}" == "${REPOSITORY_URL}" ]] || die "Unexpected application Git origin: ${current_origin}"
+    if [[ -n "$(runuser -u "${install_user}" -- git -C "${APP_DIR}" status --porcelain)" ]]; then
+      die "The application repository contains local changes. Commit or remove them before updating."
+    fi
+    runuser -u "${install_user}" -- git -C "${APP_DIR}" fetch origin "${PRIMARY_BRANCH}"
+    runuser -u "${install_user}" -- git -C "${APP_DIR}" checkout "${PRIMARY_BRANCH}"
+    runuser -u "${install_user}" -- git -C "${APP_DIR}" merge --ff-only "origin/${PRIMARY_BRANCH}"
+  else
+    rm -rf -- "${replacement_dir}"
+    git clone --branch "${PRIMARY_BRANCH}" --single-branch "${REPOSITORY_URL}" "${replacement_dir}"
+    chown -R "${install_user}:${install_group}" "${replacement_dir}"
+    if [[ -e "${APP_DIR}" ]]; then
+      rm -rf -- "${APP_DIR}"
+    fi
+    mv "${replacement_dir}" "${APP_DIR}"
+  fi
+
+  if [[ "${dry_run}" -eq 0 ]]; then
+    chown -R "${install_user}:${install_group}" "${APP_DIR}"
+    if [[ "${LEGACY_APP_DIR}" != "${APP_DIR}" && -d "${LEGACY_APP_DIR}" ]]; then
+      rm -rf -- "${LEGACY_APP_DIR}"
+    fi
   fi
 
   run install -d -m 0750 -o "${install_user}" -g "${install_group}" "${STATE_DIR}"
@@ -237,6 +351,10 @@ install_adapter() {
     run ln -s "${APP_DIR}/printer/mhc_dashboard.py" "${adapter_target}"
   elif [[ -L "${adapter_target}" && "$(readlink -f "${adapter_target}")" == "${APP_DIR}/printer/mhc_dashboard.py" ]]; then
     adapter_mode="managed"
+  elif [[ -L "${adapter_target}" && "$(readlink "${adapter_target}")" == "${LEGACY_APP_DIR}/printer/mhc_dashboard.py" ]]; then
+    adapter_mode="managed"
+    run rm -f -- "${adapter_target}"
+    run ln -s "${APP_DIR}/printer/mhc_dashboard.py" "${adapter_target}"
   fi
 
   if [[ "${config_mode}" != "existing" ]]; then
@@ -333,7 +451,11 @@ write_manifest() {
   {
     printf 'INSTALL_USER=%q\n' "${install_user}"
     printf 'INSTALL_GROUP=%q\n' "${install_group}"
+    printf 'APP_DIR=%q\n' "${APP_DIR}"
     printf 'CONFIG_DIR=%q\n' "${config_dir}"
+    printf 'MOONRAKER_CFG=%q\n' "${moonraker_cfg}"
+    printf 'MOONRAKER_UPDATE_CFG=%q\n' "${moonraker_update_cfg}"
+    printf 'MOONRAKER_ASVC=%q\n' "${moonraker_asvc}"
     printf 'PRINTER_CFG=%q\n' "${printer_cfg}"
     printf 'MANAGED_CFG=%q\n' "${managed_cfg}"
     printf 'ADAPTER_TARGET=%q\n' "${adapter_target}"
@@ -350,7 +472,10 @@ backup_integration() {
   run install -d -m 0700 "${backup_dir}"
   if [[ "${dry_run}" -eq 0 ]]; then
     cp -a "${printer_cfg}" "${backup_dir}/printer.cfg"
+    cp -a "${moonraker_cfg}" "${backup_dir}/moonraker.conf"
+    [[ -f "${moonraker_asvc}" ]] && cp -a "${moonraker_asvc}" "${backup_dir}/moonraker.asvc" || true
     [[ -f "${managed_cfg}" ]] && cp -a "${managed_cfg}" "${backup_dir}/medusahc_control.cfg" || true
+    [[ -f "${moonraker_update_cfg}" ]] && cp -a "${moonraker_update_cfg}" "${backup_dir}/medusahc-control-update.cfg" || true
     [[ -e "${adapter_target}" ]] && cp -aL "${adapter_target}" "${backup_dir}/mhc_dashboard.py" || true
   fi
 }
@@ -365,12 +490,13 @@ install_or_update() {
   log "Printer user: ${install_user}"
   log "Klipper: ${klipper_dir}"
   log "Config: ${config_dir}"
-  if [[ "${action}" == "update" && "${dry_run}" -eq 0 ]]; then
+  if [[ "${dry_run}" -eq 0 ]]; then
     systemctl stop "${APP_NAME}.service" >/dev/null 2>&1 || true
   fi
   install_application
   backup_integration
   install_adapter
+  install_moonraker_update_manager
   write_runtime_config
   write_service
   write_manifest
@@ -383,12 +509,14 @@ install_or_update() {
     fi
     systemctl restart "${APP_NAME}.service"
     systemctl is-active --quiet "${APP_NAME}.service" || die "The dashboard service did not start. Check journalctl -u ${APP_NAME}."
+    systemctl restart moonraker.service
+    systemctl is-active --quiet moonraker.service || die "Moonraker did not restart after Update Manager integration."
   fi
 
   local max_tool="" tool_count="auto-detected at runtime"
   max_tool="$(sed -nE 's/^[[:space:]]*variable_max_tool[[:space:]]*:[[:space:]]*([0-9]+).*/\1/p' "${variables_cfg}" 2>/dev/null | head -1 || true)"
   if [[ "${max_tool}" =~ ^[0-9]+$ ]]; then
-    tool_count="$((max_tool + 1))"
+    tool_count="${max_tool}"
   fi
   if [[ "${dry_run}" -eq 1 ]]; then
     log "Dry run complete. Detected tools: ${tool_count}. No files or services were changed."
@@ -409,7 +537,11 @@ load_manifest() {
   source "${MANIFEST_FILE}"
   install_user="${INSTALL_USER}"
   install_group="${INSTALL_GROUP}"
+  APP_DIR="${APP_DIR:-/opt/${APP_NAME}}"
   config_dir="${CONFIG_DIR}"
+  moonraker_cfg="${MOONRAKER_CFG:-${config_dir}/moonraker.conf}"
+  moonraker_update_cfg="${MOONRAKER_UPDATE_CFG:-${config_dir}/medusahc-control-update.cfg}"
+  moonraker_asvc="${MOONRAKER_ASVC:-$(dirname -- "${config_dir}")/moonraker.asvc}"
   printer_cfg="${PRINTER_CFG}"
   managed_cfg="${MANAGED_CFG}"
   adapter_target="${ADAPTER_TARGET}"
@@ -424,7 +556,7 @@ uninstall_application() {
   if [[ "${config_mode}" == "manual" ]] && grep -Eq '^[[:space:]]*\[include[[:space:]]+medusahc_control\.cfg\][[:space:]]*$' "${printer_cfg}"; then
     die "Manual config mode is active. Remove [include medusahc_control.cfg] from printer.cfg, restart Klipper, then run uninstall again."
   fi
-  confirm_change "Remove MedusaHC Control and restart Klipper once?"
+  confirm_change "Remove MedusaHC Control and restart Klipper and Moonraker?"
 
   if [[ "${dry_run}" -eq 0 ]]; then
     systemctl disable --now "${APP_NAME}.service" >/dev/null 2>&1 || true
@@ -437,15 +569,17 @@ uninstall_application() {
     if [[ "${adapter_mode}" == "managed" && -L "${adapter_target}" ]]; then
       rm -f "${adapter_target}"
     fi
-    rm -f "${SERVICE_FILE}"
-    rm -rf "${APP_DIR}"
+    remove_moonraker_update_manager
+    rm -f -- "${SERVICE_FILE}"
+    rm -rf -- "${APP_DIR}"
     systemctl daemon-reload
     systemctl restart klipper.service
+    systemctl restart moonraker.service
     if [[ "${purge}" -eq 1 ]]; then
-      rm -rf "${STATE_DIR}"
+      rm -rf -- "${STATE_DIR}"
     fi
   else
-    log "Would remove the managed include, adapter symlink, service and application directory."
+    log "Would remove the Klipper and Moonraker integration, adapter symlink, service and application directory."
   fi
   if [[ "${purge}" -eq 1 ]]; then
     log "Removed. Persistent data was purged."
@@ -455,6 +589,7 @@ uninstall_application() {
 }
 
 show_status() {
+  detect_paths
   printf 'Application: '
   [[ -d "${APP_DIR}" ]] && echo "installed at ${APP_DIR}" || echo "not installed"
   printf 'Service: '
@@ -477,10 +612,12 @@ show_status() {
 }
 
 self_test() {
-  local test_dir original
+  local test_dir original moonraker_original
   test_dir="$(mktemp -d)"
   printer_cfg="${test_dir}/printer.cfg"
   original="${test_dir}/printer.original.cfg"
+  moonraker_cfg="${test_dir}/moonraker.conf"
+  moonraker_original="${test_dir}/moonraker.original.conf"
   printf '[include MHC_variables.cfg]\n\n#*# <---------------------- SAVE_CONFIG ---------------------->\n#*# test = 1\n' > "${printer_cfg}"
   cp "${printer_cfg}" "${original}"
   manual_config=1
@@ -503,6 +640,13 @@ assert text.index(sys.argv[2]) < text.index("#*# <---------------------- SAVE_CO
 PY
   remove_managed_include
   cmp -s "${printer_cfg}" "${original}" || die "Managed include removal did not restore printer.cfg."
+  printf '[server]\nhost: 0.0.0.0\n' > "${moonraker_cfg}"
+  cp "${moonraker_cfg}" "${moonraker_original}"
+  write_moonraker_include
+  write_moonraker_include
+  [[ "$(grep -Fc "${MOONRAKER_MANAGED_BEGIN}" "${moonraker_cfg}")" -eq 1 ]] || die "Moonraker include is not idempotent."
+  remove_moonraker_include
+  cmp -s "${moonraker_cfg}" "${moonraker_original}" || die "Moonraker include removal did not restore moonraker.conf."
   rm -rf "${test_dir}"
   python3 -m compileall -q "${SCRIPT_DIR}/medusahc_control"
   log "Self-test passed. No printer files or services were changed."
