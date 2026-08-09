@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REPOSITORY="${MEDUSAHC_CONTROL_REPOSITORY:-Irbis3D/MedusaHC-Control}"
+REPOSITORY_REF="${MEDUSAHC_CONTROL_REF:-main}"
+PACKAGE_URL="${MEDUSAHC_CONTROL_PACKAGE_URL:-https://api.github.com/repos/${REPOSITORY}/tarball/${REPOSITORY_REF}}"
+ACCESS_TOKEN="${GH_TOKEN:-${GITHUB_TOKEN:-}}"
+
+log() { printf '[MedusaHC Control] %s\n' "$*"; }
+die() { printf '[MedusaHC Control] ERROR: %s\n' "$*" >&2; exit 1; }
+
+[[ "${EUID}" -eq 0 ]] || die "Run with: curl -fsSL INSTALL_SCRIPT_URL | sudo bash"
+command -v curl >/dev/null 2>&1 || die "curl is required."
+command -v tar >/dev/null 2>&1 || die "tar is required."
+[[ -r /dev/tty ]] || die "An interactive SSH terminal is required."
+
+temporary_directory="$(mktemp -d /tmp/medusahc-control-install.XXXXXX)"
+trap 'rm -rf -- "${temporary_directory}"' EXIT
+
+package_file="${temporary_directory}/medusahc-control.tar.gz"
+source_directory="${temporary_directory}/source"
+mkdir -p "${source_directory}"
+
+log "Downloading the installation package..."
+curl_options=(
+    -fL
+    --retry 3
+    --connect-timeout 15
+    -H "Accept: application/vnd.github+json"
+    -H "X-GitHub-Api-Version: 2022-11-28"
+)
+if [[ -n "${ACCESS_TOKEN}" ]]; then
+    curl_options+=(-H "Authorization: Bearer ${ACCESS_TOKEN}")
+fi
+curl "${curl_options[@]}" "${PACKAGE_URL}" -o "${package_file}"
+tar -xzf "${package_file}" -C "${source_directory}"
+
+installer="$(find "${source_directory}" -maxdepth 3 -type f -name install.sh -print -quit)"
+[[ -n "${installer}" ]] || die "install.sh was not found in the downloaded package."
+
+log "Starting the installer..."
+bash "${installer}" install </dev/tty >/dev/tty

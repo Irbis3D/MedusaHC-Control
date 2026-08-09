@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#090d14">
+  <title>MedusaHC Control</title>
+  <meta name="description" content="Local MedusaHC toolchanger control, calibration and diagnostics dashboard.">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">M</span>
+        <div>
+          <strong>MedusaHC</strong>
+          <span>Universal tools</span>
+        </div>
+      </div>
+
+      <nav class="nav" aria-label="Main navigation">
+        <button class="nav-item active" data-view="overview"><span>⌂</span>Dashboard</button>
+        <button class="nav-item" data-view="calibration"><span>◎</span>Calibration</button>
+        <button class="nav-item" data-view="tuning"><span>≈</span>Print tuning</button>
+        <button class="nav-item" data-view="statistics"><span>▤</span>Statistics</button>
+        <button class="nav-item setup-nav" data-view="printer-settings"><span>⚙</span>Printer settings</button>
+      </nav>
+
+      <div class="sidebar-foot">
+        <div class="connection-summary">
+          <span class="status-dot" id="connection-dot"></span>
+          <div><strong id="connection-label">Connecting</strong><small id="connection-detail">Waiting for service</small></div>
+        </div>
+        <button class="token-button" id="token-button">Control access token</button>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow" id="page-eyebrow">SYSTEM OVERVIEW</p>
+          <h1 id="page-title">Toolchanger status</h1>
+        </div>
+        <div class="topbar-actions">
+          <span class="mode-chip" id="mode-chip">SIMULATION</span>
+          <label class="confirm-toggle" title="Ask before sending printer commands">
+            <input type="checkbox" id="confirm-toggle">
+            <span class="toggle-track" aria-hidden="true"></span>
+            <span>Confirm commands</span>
+          </label>
+          <button class="mode-toggle" id="mode-toggle" type="button">Enable control</button>
+          <button class="home-button" data-action="home">Home XYZ</button>
+          <div class="system-actions" aria-label="System restart controls">
+            <button class="system-button" data-action="restart_klipper" type="button">Restart Klipper</button>
+            <button class="system-button" data-action="restart_firmware" type="button">Firmware restart</button>
+            <button class="system-button danger" data-action="reboot_device" type="button">Reboot device</button>
+          </div>
+          <button class="estop" data-action="emergency_stop">Emergency stop</button>
+        </div>
+      </header>
+
+      <section class="view active" id="view-overview">
+        <div class="state-banner" id="state-banner">
+          <span class="banner-icon">i</span>
+          <div><strong id="state-title">Loading printer state</strong><span id="state-message">The dashboard will update automatically.</span></div>
+        </div>
+
+        <div class="overview-grid">
+          <section class="machine-card panel">
+            <div class="panel-heading">
+              <div><span class="kicker">MEDUSAHC RACK</span><h2 id="rack-title">Front dock layout</h2></div>
+              <div class="legend"><span class="legend-dot parked"></span>Parked <span class="legend-dot active"></span>Active <span class="legend-dot missing"></span>Missing</div>
+            </div>
+
+            <div class="toolhead-zone">
+              <div class="toolhead-rail"></div>
+              <article class="toolhead" id="toolhead-card">
+                <span class="toolhead-caption">TOOLHEAD</span>
+                <strong id="toolhead-name">EMPTY</strong>
+                <span id="toolhead-temperature">—</span>
+                <small id="feeder-state">Feeder closed</small>
+              </article>
+            </div>
+
+            <div class="dock-rack" id="dock-rack" aria-live="polite"></div>
+          </section>
+
+          <section class="camera-panel panel">
+            <div class="panel-heading compact">
+              <div><span class="kicker">LIVE CAMERA</span><h2 id="camera-name">Printer view</h2></div>
+              <button class="quiet camera-refresh" id="camera-refresh" type="button">Reconnect</button>
+            </div>
+            <div class="camera-frame" id="camera-frame">
+              <img id="camera-stream" alt="Live printer camera" hidden>
+              <div class="camera-empty" id="camera-empty"><strong>Camera unavailable</strong><span>Waiting for Moonraker webcam settings.</span></div>
+            </div>
+          </section>
+
+          <aside class="quick-panel panel">
+            <div class="panel-heading compact"><div><span class="kicker">MANUAL CONTROL</span><h2>Current tool</h2></div></div>
+            <div class="current-tool-number" id="quick-tool-number">—</div>
+            <p class="muted" id="quick-tool-copy">No tool is mounted.</p>
+            <div class="feeder-indicator" id="feeder-indicator" role="status" aria-live="polite">
+              <div class="feeder-symbol" aria-hidden="true"><span class="feeder-arm"></span><span class="feeder-pin"></span></div>
+              <div class="feeder-copy"><span>FEEDER LATCH</span><strong id="feeder-indicator-label">CLOSED</strong><small>Klipper macro state</small></div>
+            </div>
+            <div class="button-stack">
+              <button class="primary" data-action="drop_tool">Park current tool</button>
+              <button data-action="clean">Run cleaning cycle</button>
+              <div class="split-buttons">
+                <button data-action="feeder_open">Open feeder</button>
+                <button data-action="feeder_close">Close feeder</button>
+              </div>
+            </div>
+            <div class="quick-facts">
+              <div><span>Axes</span><strong id="fact-axes">—</strong></div>
+              <div><span>Print</span><strong id="fact-print">—</strong></div>
+              <div><span>Layout</span><strong id="fact-layout">—</strong></div>
+            </div>
+          </aside>
+        </div>
+
+        <section class="panel motion-panel">
+          <div class="panel-heading">
+            <div><span class="kicker">MANUAL MOTION</span><h2>Toolhead movement</h2></div>
+            <div class="motion-heading-actions"><span class="motion-hint">One tap = one move</span><button class="home-all-motion" data-action="home">Home all axes</button></div>
+          </div>
+          <div class="position-strip" aria-label="Current toolhead position">
+            <div><span>X</span><strong id="position-x">—</strong><small>mm</small></div>
+            <div><span>Y</span><strong id="position-y">—</strong><small>mm</small></div>
+            <div><span>Z</span><strong id="position-z">—</strong><small>mm</small></div>
+          </div>
+          <div class="motion-layout">
+            <div class="motion-group">
+              <div class="motion-group-title"><strong>XY movement</strong><span id="xy-speed-label">100 mm/s</span></div>
+              <div class="xy-pad" aria-label="XY jog controls">
+                <button class="jog-button y-plus" data-jog-axis="Y" data-jog-direction="1" aria-label="Move Y positive">Y+</button>
+                <button class="jog-button x-minus" data-jog-axis="X" data-jog-direction="-1" aria-label="Move X negative">X−</button>
+                <div class="xy-center">XY</div>
+                <button class="jog-button x-plus" data-jog-axis="X" data-jog-direction="1" aria-label="Move X positive">X+</button>
+                <button class="jog-button y-minus" data-jog-axis="Y" data-jog-direction="-1" aria-label="Move Y negative">Y−</button>
+              </div>
+            </div>
+            <div class="motion-group z-motion-group">
+              <div class="motion-group-title"><strong>Z movement</strong><span id="z-speed-label">10 mm/s</span></div>
+              <div class="z-controls">
+                <button class="jog-button" data-jog-axis="Z" data-jog-direction="1">Z+</button>
+                <button class="jog-button" data-jog-axis="Z" data-jog-direction="-1">Z−</button>
+              </div>
+              <div class="axis-home-row">
+                <button data-home-axis="X">Home X</button>
+                <button data-home-axis="Y">Home Y</button>
+                <button data-home-axis="Z">Home Z</button>
+              </div>
+            </div>
+            <div class="motion-options">
+              <div>
+                <span class="motion-label">Move distance</span>
+                <div class="step-selector" role="group" aria-label="Jog distance">
+                  <button data-jog-step="0.1">0.1</button>
+                  <button class="active" data-jog-step="1">1</button>
+                  <button data-jog-step="10">10</button>
+                </div>
+              </div>
+              <label>XY speed <span><input id="xy-jog-speed" type="number" min="1" max="300" step="5" value="100"> mm/s</span></label>
+              <label>Z speed <span><input id="z-jog-speed" type="number" min="0.1" max="50" step="1" value="10"> mm/s</span></label>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel temperature-panel">
+          <div class="panel-heading"><div><span class="kicker">THERMAL CONTROL</span><h2>Tool temperatures</h2></div><button class="quiet" id="cool-all">Cool all</button></div>
+          <div class="temperature-grid" id="temperature-grid"></div>
+        </section>
+
+        <section class="panel sensor-panel">
+          <div class="panel-heading"><div><span class="kicker">LIVE INPUTS</span><h2>Tool sensors</h2></div><span class="refresh-label">updates automatically</span></div>
+          <div class="sensor-grid" id="sensor-grid"></div>
+        </section>
+      </section>
+
+      <section class="view" id="view-calibration">
+        <div class="section-intro"><div><p class="eyebrow">CALIBRATION FUNCTIONS</p><h2>Calibration</h2></div><p>Each button independently calls the corresponding calibration function configured in Klipper.</p></div>
+        <div class="calibration-grid">
+          <article class="calibration-card">
+            <span class="cal-command">CALIBRATE_AND_SAVE_OFFSETS</span>
+            <h3>XYZ tool calibration</h3>
+            <p>Runs the configured SexBall, Nudge or compatible klipper-toolchanger XYZ offset calibration.</p>
+            <button data-action="calibrate_xyz">Run XYZ calibration</button>
+          </article>
+          <article class="calibration-card">
+            <span class="cal-command">TOOL_Z_CALIBRATION</span>
+            <h3>Tool Z calibration</h3>
+            <p>Calibrates only tool Z offsets through the configured Klipper tap probe.</p>
+            <button data-action="calibrate_z">Run Z calibration</button>
+          </article>
+          <article class="calibration-card">
+            <span class="cal-command">Z_TILT_ADJUST</span>
+            <h3>Z Tilt</h3>
+            <p>Levels the independent Z drives using the configured Klipper Z tilt probe points.</p>
+            <button data-action="calibrate_z_tilt">Run Z Tilt</button>
+          </article>
+          <article class="calibration-card">
+            <span class="cal-command">BED_CALIBRATION</span>
+            <h3>Bed calibration</h3>
+            <p>Runs the configured MedusaHC bed calibration entry point for Eddy or BLTouch.</p>
+            <button data-action="calibrate_bed">Run bed calibration</button>
+          </article>
+        </div>
+      </section>
+
+      <section class="view" id="view-tuning">
+        <div class="section-intro tuning-intro"><div><p class="eyebrow">LIVE PRINT ADJUSTMENTS</p><h2>Print tuning</h2></div><p>Choose a tool first, then adjust its priming, cleaning or offsets. Global movement and cleaning positions are kept in separate sections below.</p></div>
+        <div class="settings-groups" id="tuning-groups"></div>
+      </section>
+
+      <section class="view" id="view-statistics">
+        <div class="section-intro"><div><p class="eyebrow">LOCAL HISTORY</p><h2>Toolchanger statistics</h2></div><div class="stats-intro-actions"><p>Only pickups, parks and failed changes during an active print are counted.</p><div><span id="stats-since">Counting since —</span><button class="quiet" id="reset-stats" type="button">Reset statistics</button></div></div></div>
+        <div class="stat-cards" id="stat-cards"></div>
+        <div class="stats-layout">
+          <section class="panel"><div class="panel-heading"><div><span class="kicker">BY TOOL</span><h2>Tool activity</h2></div></div><div class="tool-stats" id="tool-stats"></div></section>
+          <section class="panel"><div class="panel-heading"><div><span class="kicker">EVENT LOG</span><h2>Recent activity</h2></div></div><div class="event-list" id="event-list"></div></section>
+        </div>
+      </section>
+
+      <section class="view" id="view-printer-settings">
+        <div class="section-intro setup-intro"><div><p class="eyebrow">MACHINE CONFIGURATION</p><h2>Printer settings</h2></div><p>Dock layout, feeder geometry and calibration values. These parameters are locked while printing and should normally be changed only during initial setup.</p></div>
+        <div class="settings-groups" id="printer-settings-groups"></div>
+      </section>
+    </main>
+  </div>
+
+  <div class="toast-region" id="toast-region" aria-live="polite"></div>
+  <dialog id="confirm-dialog">
+    <form method="dialog">
+      <span class="dialog-mark">!</span>
+      <h2 id="dialog-title">Confirm action</h2>
+      <p id="dialog-copy">Make sure the printer is clear.</p>
+      <div class="dialog-actions"><button value="cancel">Cancel</button><button value="confirm" class="primary" id="dialog-confirm">Continue</button></div>
+    </form>
+  </dialog>
+  <script src="/app.js" defer></script>
+</body>
+</html>
