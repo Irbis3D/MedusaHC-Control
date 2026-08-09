@@ -70,6 +70,16 @@ Normal uninstall removes the application and its Klipper integration but keeps
 local statistics and installer backups. `--purge` removes those persistent
 files as well.
 
+The public one-command equivalents are:
+
+```bash
+# Update while preserving settings and statistics
+curl -fsSL https://raw.githubusercontent.com/Irbis3D/MedusaHC-Control/main/install-online.sh | sudo bash -s -- update
+
+# Remove the application, integration and all dashboard-owned persistent data
+curl -fsSL https://raw.githubusercontent.com/Irbis3D/MedusaHC-Control/main/install-online.sh | sudo bash -s -- uninstall --purge
+```
+
 ## Files owned by the installer
 
 - `/opt/medusahc-control` — read-only application files.

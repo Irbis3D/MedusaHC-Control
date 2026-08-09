@@ -39,4 +39,15 @@ installer="$(find "${source_directory}" -maxdepth 3 -type f -name install.sh -pr
 [[ -n "${installer}" ]] || die "install.sh was not found in the downloaded package."
 
 log "Starting the installer..."
-bash "${installer}" install </dev/tty >/dev/tty
+if [[ "$#" -eq 0 ]]; then
+    installer_arguments=(install)
+else
+    installer_arguments=("$@")
+fi
+
+case "${installer_arguments[0]}" in
+    install|update|uninstall|status) ;;
+    *) die "Unsupported action: ${installer_arguments[0]}" ;;
+esac
+
+bash "${installer}" "${installer_arguments[@]}" </dev/tty >/dev/tty

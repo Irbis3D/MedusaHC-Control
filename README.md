@@ -49,6 +49,26 @@ read-only sensor adapter, starts the isolated dashboard service and connects it
 to the local Moonraker instance. See `INSTALLER.md` for update, status and
 uninstall commands.
 
+## Update
+
+```text
+curl -fsSL https://raw.githubusercontent.com/Irbis3D/MedusaHC-Control/main/install-online.sh | sudo bash -s -- update
+```
+
+The update keeps the dashboard configuration, statistics, setting history and
+installer backups, replaces the application code and restarts the service.
+
+## Uninstall completely
+
+```text
+curl -fsSL https://raw.githubusercontent.com/Irbis3D/MedusaHC-Control/main/install-online.sh | sudo bash -s -- uninstall --purge
+```
+
+The uninstaller asks for confirmation, removes all installer-owned files and
+Klipper integration, purges dashboard data and restarts Klipper. Values that a
+user deliberately saved into their own MedusaHC configuration remain user data
+and are not reverted automatically.
+
 ## Safety status
 
 This is an experimental prototype. Keep Mainsail open, remain near the printer

@@ -145,6 +145,7 @@ choose_config_mode() {
 check_sources() {
   [[ -d "${SCRIPT_DIR}/medusahc_control" ]] || die "medusahc_control package is missing next to install.sh."
   [[ -f "${SCRIPT_DIR}/printer/mhc_dashboard.py" ]] || die "printer/mhc_dashboard.py is missing."
+  [[ -f "${SCRIPT_DIR}/VERSION" ]] || die "VERSION is missing next to install.sh."
   python3 -c 'import sys; assert sys.version_info >= (3, 9), "Python 3.9 or newer is required"'
 }
 
@@ -213,9 +214,13 @@ EOF
 install_application() {
   run install -d -m 0755 "${APP_DIR}"
   if [[ "${dry_run}" -eq 0 ]]; then
+    if [[ "${action}" == "update" ]]; then
+      rm -rf -- "${APP_DIR}/medusahc_control" "${APP_DIR}/printer"
+    fi
     cp -a "${SCRIPT_DIR}/medusahc_control" "${APP_DIR}/"
     cp -a "${SCRIPT_DIR}/printer" "${APP_DIR}/"
     install -m 0644 "${SCRIPT_DIR}/pyproject.toml" "${APP_DIR}/pyproject.toml"
+    install -m 0644 "${SCRIPT_DIR}/VERSION" "${APP_DIR}/VERSION"
     install -m 0644 "${SCRIPT_DIR}/README.md" "${APP_DIR}/README.md"
     install -m 0644 "${SCRIPT_DIR}/INSTALLER.md" "${APP_DIR}/INSTALLER.md"
     install -m 0755 "${SCRIPT_DIR}/install.sh" "${APP_DIR}/install.sh"
@@ -334,6 +339,7 @@ write_manifest() {
     printf 'ADAPTER_TARGET=%q\n' "${adapter_target}"
     printf 'ADAPTER_MODE=%q\n' "${adapter_mode}"
     printf 'CONFIG_MODE=%q\n' "${config_mode}"
+    printf 'INSTALLED_VERSION=%q\n' "$(tr -d '\r\n' < "${SCRIPT_DIR}/VERSION")"
   } > "${MANIFEST_FILE}"
   chown root:root "${MANIFEST_FILE}"
   chmod 0600 "${MANIFEST_FILE}"
@@ -359,6 +365,9 @@ install_or_update() {
   log "Printer user: ${install_user}"
   log "Klipper: ${klipper_dir}"
   log "Config: ${config_dir}"
+  if [[ "${action}" == "update" && "${dry_run}" -eq 0 ]]; then
+    systemctl stop "${APP_NAME}.service" >/dev/null 2>&1 || true
+  fi
   install_application
   backup_integration
   install_adapter
@@ -376,13 +385,16 @@ install_or_update() {
     systemctl is-active --quiet "${APP_NAME}.service" || die "The dashboard service did not start. Check journalctl -u ${APP_NAME}."
   fi
 
-  local tool_count="unknown"
-  tool_count="$(sed -nE 's/^[[:space:]]*variable_max_tool[[:space:]]*:[[:space:]]*([0-9]+).*/\1/p' "${variables_cfg}" 2>/dev/null | head -1 || true)"
-  [[ -n "${tool_count}" ]] || tool_count="auto-detected at runtime"
+  local max_tool="" tool_count="auto-detected at runtime"
+  max_tool="$(sed -nE 's/^[[:space:]]*variable_max_tool[[:space:]]*:[[:space:]]*([0-9]+).*/\1/p' "${variables_cfg}" 2>/dev/null | head -1 || true)"
+  if [[ "${max_tool}" =~ ^[0-9]+$ ]]; then
+    tool_count="$((max_tool + 1))"
+  fi
   if [[ "${dry_run}" -eq 1 ]]; then
     log "Dry run complete. Detected tools: ${tool_count}. No files or services were changed."
   else
-    log "Installed. Tools: ${tool_count}. Open http://PRINTER_IP:${port}"
+    installed_version="$(tr -d '\r\n' < "${SCRIPT_DIR}/VERSION")"
+    log "${action^} complete. Version: ${installed_version}. Tools: ${tool_count}. Open http://PRINTER_IP:${port}"
     if [[ "${config_mode}" == "manual" ]]; then
       log "printer.cfg was not changed. Before the SAVE_CONFIG block, add:"
       printf '\n[include medusahc_control.cfg]\n\n'
@@ -450,6 +462,13 @@ show_status() {
     echo "active"
   else
     echo "inactive"
+  fi
+  printf 'Version: '
+  if [[ -f "${APP_DIR}/VERSION" ]]; then
+    tr -d '\r\n' < "${APP_DIR}/VERSION"
+    printf '\n'
+  else
+    echo "not found"
   fi
   printf 'Configuration: '
   [[ -f "${CONFIG_FILE}" ]] && echo "${CONFIG_FILE}" || echo "not found"
