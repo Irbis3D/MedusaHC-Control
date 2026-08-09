@@ -51,12 +51,13 @@ curl -fsSL https://raw.githubusercontent.com/Irbis3D/MedusaHC-Control/main/insta
 ```
 
 The installer detects the existing Klipper and `printer_data` paths, creates a
-backup and asks one question before changing `printer.cfg`. It then adds the
-read-only sensor adapter, starts the isolated dashboard service and connects it
-to the local Moonraker instance. It also registers MedusaHC Control in the
-Moonraker Update Manager so updates appear in Mainsail alongside Klipper and
-Moonraker. See `INSTALLER.md` for command-line update, status and uninstall
-commands.
+backup and asks separately before changing `printer.cfg` and `moonraker.conf`.
+It then adds the read-only sensor adapter, starts the isolated dashboard service
+and connects it to the local Moonraker instance. If permitted, it registers
+MedusaHC Control in the Moonraker Update Manager so updates appear in Mainsail
+alongside Klipper and Moonraker. Declining either edit keeps installation
+working and prints the exact manual configuration. See `INSTALLER.md` for
+command-line update, status and uninstall commands.
 
 ## Update
 

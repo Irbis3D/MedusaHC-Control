@@ -1,8 +1,8 @@
 # MedusaHC Control installer
 
 The dashboard is packaged as an isolated local service. It does not modify
-Mainsail, nginx or existing MedusaHC macros. It adds one marked include to
-Moonraker so the dashboard appears in the standard Update Manager.
+Mainsail, nginx or existing MedusaHC macros. With permission, it adds one marked
+include to Moonraker so the dashboard appears in the standard Update Manager.
 
 ## Install on an existing working MedusaHC printer
 
@@ -12,21 +12,22 @@ Open an SSH terminal on the printer and run one command:
 curl -fsSL https://raw.githubusercontent.com/Irbis3D/MedusaHC-Control/main/install-online.sh | sudo bash
 ```
 
-The system may request the normal sudo password. The installer itself asks only
-whether it may add its marked include to `printer.cfg`. Press Enter to accept
-the default automatic integration, or answer `n` to receive the exact manual
-instruction instead.
+The system may request the normal sudo password. The installer asks two
+independent questions: whether it may add its marked include to
+`printer.cfg`, and whether it may register the project in `moonraker.conf` for
+Mainsail updates. Press Enter to accept each default automatic integration, or
+answer `n` to receive the exact manual instructions instead.
 
 After installation, open `http://PRINTER_IP:8090`.
 
 The installer detects the printer user, `printer_data`, Klipper and the number
 of tools. It refuses to continue during an active or paused print. Before
-editing `printer.cfg`, it asks separately whether the managed include may be
-added automatically.
+editing either main configuration file, it asks separately whether each managed
+include may be added automatically.
 
-The application directory is a clean Git clone owned by the printer user.
-Moonraker manages it as a `git_repo` extension and restarts both
-`medusahc-control` and Klipper after an update.
+The application directory is a clean Git clone owned by the printer user. If
+Update Manager integration is accepted, Moonraker manages it as a `git_repo`
+extension and restarts both `medusahc-control` and Klipper after an update.
 
 Tool count is never hard-coded by the installer or dashboard. The running panel
 reads `GLOBAL_STATE.variable_max_tool` and dynamically creates T0 through the
@@ -69,6 +70,7 @@ sudo ./install.sh uninstall
 sudo ./install.sh uninstall --purge
 sudo ./install.sh --dry-run
 sudo ./install.sh --manual-config
+sudo ./install.sh --manual-moonraker
 ```
 
 Normal uninstall removes the application and its Klipper integration but keeps
