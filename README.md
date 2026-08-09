@@ -1,96 +1,145 @@
 # MedusaHC Control
 
+MedusaHC Control is a local web control panel for a MedusaHC toolchanger. It
+runs on the printer host next to Klipper, Moonraker and Mainsail and opens on a
+separate port. It does not replace Mainsail: the panel provides one place for
+the MedusaHC controls, tool states, settings and calibration commands that are
+otherwise spread across macros and configuration files.
+
+MedusaHC Control is part of the [MedusaHC project](https://github.com/Irbis3D/MedusaHC).
+
 > [!WARNING]
-> This is an experimental, AI-assisted project created largely through
-> "vibe coding." Use it entirely at your own risk. At this stage, no guarantee
-> can be made that it will not break configuration, disrupt Klipper or cause
-> unexpected printer behavior. Keep Mainsail available, stay near the printer
-> during testing and be prepared to restore a known-good backup.
+> This project is experimental and is not yet intended for unattended use. It
+> was created with extensive AI assistance ("vibe coding") and has not been
+> tested on every printer configuration. Use it at your own risk. Keep a
+> working backup, keep Mainsail available and stay near the printer when
+> testing motion or tool changes. I cannot guarantee that the current version
+> will not cause configuration errors or unexpected printer behavior.
 
-Experimental local control, calibration and diagnostics dashboard for
-MedusaHC, Klipper and Moonraker. It runs beside Mainsail on a separate port and
-keeps its statistics locally in SQLite.
+## Current stage
 
-The dashboard is independent of printer size, rack side and tool count. In live
-mode it reads the number of tools from `GLOBAL_STATE.variable_max_tool` and
-builds the rack, heaters, sensors, settings and statistics dynamically.
+This is an early working prototype. It has been tested on a DuCR10 with six
+rear-mounted MedusaHC tools, but the interface itself is not limited to six
+tools. It reads the configured tool count from
+`GLOBAL_STATE.variable_max_tool` each time it starts and creates the required
+tool cards and settings automatically.
 
-Nothing is uploaded by the service. Simulation mode is enabled by default.
+Support for different printers and MedusaHC layouts is still being developed.
+The panel expects an already installed and working MedusaHC configuration. It
+does not yet provide the complete setup wizard planned for future versions.
 
-## Current prototype features
+## What it can do
 
-- Dynamic front/rear dock rack for the configured tool count.
-- Active, parked, released and ambiguous tool sensor states.
-- Tool selection, parking, cleaning and feeder controls.
-- Individual tool temperatures and cooldown.
-- XYZ, tap Z, Z Tilt and bed calibration functions.
-- Moonraker camera stream next to the dynamically sized live tool rack.
-- Per-tool priming, cleaning and offset controls with runtime application,
-  confirmed permanent configuration writes and ten-value local history.
-- Local print-only tool pickup, parking and failed-change statistics with a
-  resettable counting period.
-- Conservative movement interlocks while printing or in a sensor error state.
-- Optional control token for command endpoints.
+- Show the active tool, dock sensors, feeder state and connection state.
+- Select and park tools and open or close the feeder.
+- Set individual tool temperatures and cool tools down.
+- Show the Moonraker camera stream.
+- Home and move the printer axes.
+- Run MedusaHC cleaning, priming and calibration macros.
+- Run Z Tilt and common bed calibration commands.
+- Change tool offsets and MedusaHC motion, cleaning and priming variables.
+- Apply supported values temporarily during the current Klipper session.
+- Save supported values permanently to the appropriate configuration file
+  after a warning and confirmation.
+- Keep the ten most recent values entered for each supported setting.
+- Count tool pickups, parking operations and failed changes during printing.
+- Restart Klipper, restart the firmware or reboot the printer host.
+- Switch between monitoring mode and active control mode.
 
-## Run locally in simulation mode
+Permanent configuration editing is still experimental. Every permanent write
+creates a timestamped backup, but you should also keep your own known-good
+printer backup.
 
-Python 3.9 or newer is the only requirement.
+## Requirements
+
+- An existing Linux Klipper installation with Moonraker and MedusaHC.
+- Python 3.9 or newer.
+- A working `GLOBAL_STATE` MedusaHC macro.
+- SSH access with `sudo` permission for installation.
+
+The installer detects common CB2 and Raspberry Pi installations instead of
+using paths tied to the `biqu` user.
+
+## Install
+
+Open an SSH terminal on the printer and run:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Irbis3D/MedusaHC-Control/main/install-online.sh | sudo bash
+```
+
+The installer finds the Klipper and `printer_data` directories and creates a
+backup. It asks before adding the MedusaHC Control include to `printer.cfg` and
+before adding the project to Moonraker Update Manager. If you decline either
+change, it prints the lines and commands required to finish that part manually.
+
+The installer never intentionally writes inside Klipper's generated
+`SAVE_CONFIG` section. It checks that the complete section remains unchanged
+before saving `printer.cfg`.
+
+After installation, open:
+
+```text
+http://PRINTER_IP:8090
+```
+
+Start with monitoring mode and check that the number of tools, temperatures and
+sensor states are correct before enabling control.
+
+## Update
+
+If Moonraker integration was enabled during installation, update **MedusaHC
+Control** from the normal Update Manager page in Mainsail.
+
+The SSH update command is also available:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Irbis3D/MedusaHC-Control/main/install-online.sh | sudo bash -s -- update
+```
+
+Updates keep the panel configuration, statistics, recent setting values and
+installer backups.
+
+## Uninstall
+
+To remove the panel and all data created by it:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Irbis3D/MedusaHC-Control/main/install-online.sh | sudo bash -s -- uninstall --purge
+```
+
+The uninstaller removes the service, application files and installer-managed
+Klipper and Moonraker entries. Values deliberately saved into the user's own
+MedusaHC configuration remain user configuration and are not silently rolled
+back.
+
+More installation, manual configuration and recovery commands are described in
+[INSTALLER.md](INSTALLER.md).
+
+## Run on a computer without a printer
+
+The built-in simulator can be used for interface development:
 
 ```text
 python -m medusahc_control --simulate --port 8090
 ```
 
-Open `http://127.0.0.1:8090`.
+Then open `http://127.0.0.1:8090`.
 
-## Linux installation
+## Support the projects
 
-Open an SSH terminal on the CB2 or Raspberry Pi and run:
+- [Patreon](https://patreon.com/Irbis3D)
+- [Buy Me a Coffee](https://buymeacoffee.com/Irbis3D)
+- [YouTube](https://youtube.com/@Irbis3D)
 
-```text
-curl -fsSL https://raw.githubusercontent.com/Irbis3D/MedusaHC-Control/main/install-online.sh | sudo bash
-```
+## License
 
-The installer detects the existing Klipper and `printer_data` paths, creates a
-backup and asks separately before changing `printer.cfg` and `moonraker.conf`.
-It then adds the read-only sensor adapter, starts the isolated dashboard service
-and connects it to the local Moonraker instance. If permitted, it registers
-MedusaHC Control in the Moonraker Update Manager so updates appear in Mainsail
-alongside Klipper and Moonraker. Declining either edit keeps installation
-working and prints the exact manual configuration. See `INSTALLER.md` for
-command-line update, status and uninstall commands.
+Copyright (C) 2026 Irbis3D.
 
-Installer-managed edits to `printer.cfg` are restricted to the area above
-Klipper's `SAVE_CONFIG` marker. The complete auto-generated calibration tail is
-verified unchanged before the file is written during both installation and
-uninstall.
+This project is licensed under the GNU General Public License version 3
+(GPLv3), the same license as the main MedusaHC project. You may use, modify and
+share it, but you must keep the copyright and license notices, provide the
+corresponding source code when required, license distributed derivative work
+under GPLv3 and state significant changes.
 
-## Update
-
-Use the **Update** button for MedusaHC Control in the Mainsail Update Manager.
-Moonraker updates the clean Git repository and restarts MedusaHC Control and
-Klipper. The command below remains available as an SSH recovery alternative:
-
-```text
-curl -fsSL https://raw.githubusercontent.com/Irbis3D/MedusaHC-Control/main/install-online.sh | sudo bash -s -- update
-```
-
-Both methods keep the dashboard configuration, statistics, setting history and
-installer backups.
-
-## Uninstall completely
-
-```text
-curl -fsSL https://raw.githubusercontent.com/Irbis3D/MedusaHC-Control/main/install-online.sh | sudo bash -s -- uninstall --purge
-```
-
-The uninstaller asks for confirmation, removes all installer-owned files,
-Klipper integration and Moonraker Update Manager registration, purges dashboard
-data and restarts Klipper and Moonraker. Values that a user deliberately saved
-into their own MedusaHC configuration remain user data and are not reverted
-automatically.
-
-## Safety status
-
-This is an experimental prototype. Keep Mainsail open, remain near the printer
-and test read-only state reporting before enabling any motion. MedusaHC Control
-does not replace Klipper's own safety checks or the printer's emergency stop.
+See [LICENSE](LICENSE) for the complete license text.
