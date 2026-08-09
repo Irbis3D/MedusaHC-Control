@@ -160,7 +160,8 @@ choose_moonraker_mode() {
     moonraker_mode="managed"
     return
   fi
-  if grep -Eq '^[[:space:]]*\[update_manager[[:space:]]+medusahc-control\][[:space:]]*$' "${moonraker_cfg}"; then
+  if ! grep -Fq "${MOONRAKER_MANAGED_BEGIN}" "${moonraker_cfg}" \
+      && grep -Eq '^[[:space:]]*\[update_manager[[:space:]]+medusahc-control\][[:space:]]*$' "${moonraker_cfg}"; then
     moonraker_mode="existing"
     return
   fi
@@ -267,32 +268,73 @@ EOF
 }
 
 write_moonraker_include() {
-  python3 - "${moonraker_cfg}" "${MOONRAKER_MANAGED_BEGIN}" "${MOONRAKER_MANAGED_END}" <<'PY'
+  python3 - "${moonraker_cfg}" "${MOONRAKER_MANAGED_BEGIN}" "${MOONRAKER_MANAGED_END}" "${APP_NAME}" "${APP_DIR}" "${REPOSITORY_URL}" "${PRIMARY_BRANCH}" <<'PY'
 from pathlib import Path
 import sys
 
 path = Path(sys.argv[1])
 begin, end = sys.argv[2:4]
+name, app_path, origin, branch = sys.argv[4:8]
 text = path.read_text(encoding="utf-8")
-block = f"{begin}\n[include medusahc-control-update.cfg]\n{end}\n"
-if begin not in text:
-    if not text.endswith("\n"):
-        text += "\n"
+block = f"""
+{begin}
+[update_manager {name}]
+type: git_repo
+channel: dev
+path: {app_path}
+origin: {origin}
+primary_branch: {branch}
+managed_services: {name} klipper
+info_tags:
+    desc=Experimental MedusaHC control dashboard
+{end}
+"""
+if begin in text:
+    start = text.index(begin)
+    if start > 0 and text[start - 1] == "\n":
+        start -= 1
+    finish = text.index(end, start) + len(end)
+    if finish < len(text) and text[finish] == "\n":
+        finish += 1
+    text = text[:start] + block + text[finish:]
+else:
     text += block
-    path.write_text(text, encoding="utf-8")
+path.write_text(text, encoding="utf-8")
 PY
 }
 
 remove_moonraker_include() {
-  python3 - "${moonraker_cfg}" "${MOONRAKER_MANAGED_BEGIN}" "${MOONRAKER_MANAGED_END}" <<'PY'
+  python3 - "${moonraker_cfg}" "${MOONRAKER_MANAGED_BEGIN}" "${MOONRAKER_MANAGED_END}" "${APP_NAME}" "${APP_DIR}" "${REPOSITORY_URL}" "${PRIMARY_BRANCH}" <<'PY'
 from pathlib import Path
 import sys
 
 path = Path(sys.argv[1])
 begin, end = sys.argv[2:4]
+name, app_path, origin, branch = sys.argv[4:8]
 text = path.read_text(encoding="utf-8")
-block = f"{begin}\n[include medusahc-control-update.cfg]\n{end}\n"
-path.write_text(text.replace(block, "", 1), encoding="utf-8")
+if begin in text:
+    start = text.index(begin)
+    if start > 0 and text[start - 1] == "\n":
+        start -= 1
+    finish = text.index(end, start) + len(end)
+    if finish < len(text) and text[finish] == "\n":
+        finish += 1
+    text = text[:start] + text[finish:]
+else:
+    # Compatibility with a v0.2.3 installation manually converted from the
+    # legacy include to the exact inline updater block.
+    exact_block = f"""[update_manager {name}]
+type: git_repo
+channel: dev
+path: {app_path}
+origin: {origin}
+primary_branch: {branch}
+managed_services: {name} klipper
+info_tags:
+    desc=Experimental MedusaHC control dashboard
+"""
+    text = text.replace(exact_block, "", 1)
+path.write_text(text, encoding="utf-8")
 PY
 }
 
@@ -301,31 +343,19 @@ install_moonraker_update_manager() {
     log "Moonraker Update Manager registration was not changed."
     return
   fi
-  if grep -Eq '^[[:space:]]*\[update_manager[[:space:]]+medusahc-control\][[:space:]]*$' "${moonraker_cfg}"; then
+  if ! grep -Fq "${MOONRAKER_MANAGED_BEGIN}" "${moonraker_cfg}" \
+      && grep -Eq '^[[:space:]]*\[update_manager[[:space:]]+medusahc-control\][[:space:]]*$' "${moonraker_cfg}"; then
     die "moonraker.conf already contains an unmanaged medusahc-control updater section."
   fi
 
   if [[ "${dry_run}" -eq 1 ]]; then
-    log "Would create ${moonraker_update_cfg} and include it from moonraker.conf."
+    log "Would add one marked Update Manager block directly to ${moonraker_cfg}."
     log "Would authorize ${APP_NAME} in ${moonraker_asvc}."
     return
   fi
 
-  cat > "${moonraker_update_cfg}" <<EOF
-# Managed by MedusaHC Control. Remove through the online uninstall command.
-[update_manager ${APP_NAME}]
-type: git_repo
-channel: dev
-path: ${APP_DIR}
-origin: ${REPOSITORY_URL}
-primary_branch: ${PRIMARY_BRANCH}
-managed_services: ${APP_NAME} klipper
-info_tags:
-    desc=Experimental MedusaHC control dashboard
-EOF
-  chown "${install_user}:${install_group}" "${moonraker_update_cfg}"
-  chmod 0644 "${moonraker_update_cfg}"
   write_moonraker_include
+  rm -f -- "${moonraker_update_cfg}"
 
   touch "${moonraker_asvc}"
   if ! grep -Fxq "${APP_NAME}" "${moonraker_asvc}"; then
@@ -728,7 +758,8 @@ PY
   cp "${moonraker_cfg}" "${moonraker_original}"
   write_moonraker_include
   write_moonraker_include
-  [[ "$(grep -Fc "${MOONRAKER_MANAGED_BEGIN}" "${moonraker_cfg}")" -eq 1 ]] || die "Moonraker include is not idempotent."
+  [[ "$(grep -Fc "${MOONRAKER_MANAGED_BEGIN}" "${moonraker_cfg}")" -eq 1 ]] || die "Moonraker updater block is not idempotent."
+  grep -Fq "[update_manager ${APP_NAME}]" "${moonraker_cfg}" || die "Moonraker updater section was not written inline."
   remove_moonraker_include
   cmp -s "${moonraker_cfg}" "${moonraker_original}" || die "Moonraker include removal did not restore moonraker.conf."
   rm -rf "${test_dir}"

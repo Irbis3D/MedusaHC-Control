@@ -2,7 +2,8 @@
 
 The dashboard is packaged as an isolated local service. It does not modify
 Mainsail, nginx or existing MedusaHC macros. With permission, it adds one marked
-include to Moonraker so the dashboard appears in the standard Update Manager.
+block directly to `moonraker.conf` so the dashboard appears in the standard
+Update Manager.
 
 ## Install on an existing working MedusaHC printer
 
@@ -101,9 +102,9 @@ curl -fsSL https://raw.githubusercontent.com/Irbis3D/MedusaHC-Control/main/insta
 - `printer_data/config/medusahc_control.cfg` — one small Klipper section.
 - One marked include block in `printer.cfg`, always inserted before
   `SAVE_CONFIG` and removed by the uninstaller.
-- `printer_data/config/medusahc-control-update.cfg` — Moonraker updater section.
-- One marked include in `moonraker.conf` and one exact service entry in
-  `printer_data/moonraker.asvc`, both removed by the uninstaller.
+- One marked `[update_manager medusahc-control]` block directly in
+  `moonraker.conf` and one exact service entry in `printer_data/moonraker.asvc`,
+  both removed by the uninstaller.
 
 Permanent changes made through **Save to config** are user data and are not
 reverted by uninstall. Each such change has its own timestamped backup in the
