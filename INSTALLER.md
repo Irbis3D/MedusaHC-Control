@@ -13,18 +13,22 @@ Open an SSH terminal on the printer and run one command:
 curl -fsSL https://raw.githubusercontent.com/Irbis3D/MedusaHC-Control/main/install-online.sh | sudo bash
 ```
 
-The system may request the normal sudo password. The installer asks two
-independent questions: whether it may add its marked include to
-`printer.cfg`, and whether it may register the project in `moonraker.conf` for
-Mainsail updates. Press Enter to accept each default automatic integration, or
-answer `n` to receive the exact manual instructions instead.
+The system may request the normal sudo password. The installer first asks for
+the web interface port. Press Enter to use `8090`, or enter another port.
+It then asks two independent questions: whether it may add its marked include
+to `printer.cfg`, and whether it may register the project in `moonraker.conf`
+for Mainsail updates. Press Enter to accept each default automatic integration,
+or answer `n` to receive the exact manual instructions instead.
 
-After installation, open `http://PRINTER_IP:8090`.
+After installation, open `http://PRINTER_IP:SELECTED_PORT`.
 
 The installer detects the printer user, `printer_data`, Klipper and the number
 of tools. It refuses to continue during an active or paused print. Before
 editing either main configuration file, it asks separately whether each managed
 include may be added automatically.
+
+Updates reuse the saved port without asking again. For unattended installation,
+`--yes` uses port `8090`; set `MEDUSAHC_PORT` to choose a different port.
 
 The installer treats everything from Klipper's `SAVE_CONFIG` marker to the end
 of `printer.cfg` as protected calibration data. Automatic install and uninstall

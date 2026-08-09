@@ -112,7 +112,41 @@ detect_paths() {
   klipper_extras="${klipper_dir}/klippy/extras"
   [[ -d "${klipper_extras}" ]] || die "Klipper extras were not found at ${klipper_extras}. Set MEDUSAHC_KLIPPER_DIR."
   adapter_target="${klipper_extras}/mhc_dashboard.py"
-  port="${MEDUSAHC_PORT:-8090}"
+}
+
+read_configured_port() {
+  [[ -f "${CONFIG_FILE}" ]] || return 0
+  python3 - "${CONFIG_FILE}" <<'PY' 2>/dev/null || true
+import json
+import sys
+
+try:
+    value = json.load(open(sys.argv[1], encoding="utf-8")).get("port", "")
+    if isinstance(value, int):
+        print(value)
+except (OSError, ValueError, TypeError):
+    pass
+PY
+}
+
+choose_port() {
+  configured_port="$(read_configured_port)"
+  if [[ "${action}" == "update" ]]; then
+    port="${MEDUSAHC_PORT:-${configured_port:-8090}}"
+    return
+  fi
+
+  local default_port="${MEDUSAHC_PORT:-8090}"
+  if [[ "${assume_yes}" -eq 1 || "${dry_run}" -eq 1 || -n "${MEDUSAHC_PORT:-}" ]]; then
+    port="${default_port}"
+    return
+  fi
+
+  [[ -t 0 ]] || die "Cannot ask for the web interface port. Re-run with --yes or set MEDUSAHC_PORT."
+  printf 'Web interface port [%s]: ' "${default_port}"
+  local reply
+  read -r reply
+  port="${reply:-${default_port}}"
 }
 
 confirm_change() {
@@ -454,9 +488,8 @@ install_adapter() {
 
 write_runtime_config() {
   local legacy_config="/etc/medusahc-control.json"
-  [[ -f "${CONFIG_FILE}" ]] && return
   if [[ "${dry_run}" -eq 1 ]]; then
-    log "Would create ${CONFIG_FILE}."
+    log "Would write ${CONFIG_FILE} with web interface port ${port}."
     return
   fi
   python3 - "${CONFIG_FILE}" "${legacy_config}" "${port}" "${STATE_DIR}" "${printer_cfg}" "${variables_cfg}" <<'PY'
@@ -465,7 +498,9 @@ import json
 import sys
 
 target, legacy = Path(sys.argv[1]), Path(sys.argv[2])
-if legacy.is_file():
+if target.is_file():
+    data = json.loads(target.read_text(encoding="utf-8"))
+elif legacy.is_file():
     data = json.loads(legacy.read_text(encoding="utf-8"))
 else:
     data = {
@@ -480,6 +515,7 @@ else:
         "allow_commands": True,
     }
 data.update({
+    "port": int(sys.argv[3]),
     "database_path": str(Path(sys.argv[4]) / "medusahc-control.db"),
     "printer_config_path": sys.argv[5],
     "medusahc_variables_path": sys.argv[6] if Path(sys.argv[6]).is_file() else "",
@@ -540,6 +576,7 @@ write_manifest() {
     printf 'ADAPTER_MODE=%q\n' "${adapter_mode}"
     printf 'CONFIG_MODE=%q\n' "${config_mode}"
     printf 'MOONRAKER_MODE=%q\n' "${moonraker_mode}"
+    printf 'PORT=%q\n' "${port}"
     printf 'INSTALLED_VERSION=%q\n' "$(tr -d '\r\n' < "${SCRIPT_DIR}/VERSION")"
   } > "${MANIFEST_FILE}"
   chown root:root "${MANIFEST_FILE}"
@@ -566,12 +603,14 @@ install_or_update() {
   detect_paths
   check_sources
   check_print_idle
+  choose_port
   choose_config_mode
   choose_moonraker_mode
 
   log "Printer user: ${install_user}"
   log "Klipper: ${klipper_dir}"
   log "Config: ${config_dir}"
+  log "Web interface port: ${port}"
   if [[ "${dry_run}" -eq 0 ]]; then
     systemctl stop "${APP_NAME}.service" >/dev/null 2>&1 || true
   fi
@@ -709,6 +748,14 @@ show_status() {
   fi
   printf 'Configuration: '
   [[ -f "${CONFIG_FILE}" ]] && echo "${CONFIG_FILE}" || echo "not found"
+  printf 'Web interface: '
+  local configured_status_port
+  configured_status_port="$(read_configured_port)"
+  if [[ -n "${configured_status_port}" ]]; then
+    echo "http://PRINTER_IP:${configured_status_port}"
+  else
+    echo "not configured"
+  fi
   printf 'Manifest: '
   [[ -f "${MANIFEST_FILE}" ]] && echo "present" || echo "not found"
 }

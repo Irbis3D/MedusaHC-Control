@@ -69,9 +69,11 @@ curl -fsSL https://raw.githubusercontent.com/Irbis3D/MedusaHC-Control/main/insta
 ```
 
 The installer finds the Klipper and `printer_data` directories and creates a
-backup. It asks before adding the MedusaHC Control include to `printer.cfg` and
-before adding the project to Moonraker Update Manager. If you decline either
-change, it prints the lines and commands required to finish that part manually.
+backup. It asks which web interface port to use; press Enter to use the default
+port `8090`, or enter another port. It then asks before adding the MedusaHC
+Control include to `printer.cfg` and before adding the project to Moonraker
+Update Manager. If you decline either configuration change, it prints the lines
+and commands required to finish that part manually.
 
 The installer never intentionally writes inside Klipper's generated
 `SAVE_CONFIG` section. It checks that the complete section remains unchanged
@@ -80,7 +82,7 @@ before saving `printer.cfg`.
 After installation, open:
 
 ```text
-http://PRINTER_IP:8090
+http://PRINTER_IP:SELECTED_PORT
 ```
 
 Start with monitoring mode and check that the number of tools, temperatures and
