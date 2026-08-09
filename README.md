@@ -1,5 +1,12 @@
 # MedusaHC Control
 
+> [!WARNING]
+> This is an experimental, AI-assisted project created largely through
+> "vibe coding." Use it entirely at your own risk. At this stage, no guarantee
+> can be made that it will not break configuration, disrupt Klipper or cause
+> unexpected printer behavior. Keep Mainsail available, stay near the printer
+> during testing and be prepared to restore a known-good backup.
+
 Experimental local control, calibration and diagnostics dashboard for
 MedusaHC, Klipper and Moonraker. It runs beside Mainsail on a separate port and
 keeps its statistics locally in SQLite.
