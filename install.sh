@@ -143,7 +143,7 @@ choose_port() {
   fi
 
   [[ -t 0 ]] || die "Cannot ask for the web interface port. Re-run with --yes or set MEDUSAHC_PORT."
-  printf 'Web interface port [%s]: ' "${default_port}"
+  printf 'Enter the web interface port, or press Enter to use the default port %s: ' "${default_port}"
   local reply
   read -r reply
   port="${reply:-${default_port}}"
