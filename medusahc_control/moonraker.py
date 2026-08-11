@@ -66,6 +66,7 @@ class MoonrakerClient:
             "toolchanger",
             "pin_watch io",
             "mhc_dashboard",
+            "save_variables",
             "gcode_macro TOOL_CFG",
             "gcode_macro GLOBAL_STATE",
             "gcode_macro TOOL_OFFSET",

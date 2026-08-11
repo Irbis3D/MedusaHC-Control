@@ -140,6 +140,7 @@ def schema_for(
                 template = dict(known.get(variable, {"variable": variable, "category": category or "Other", "step": 0.1}))
                 template["description"] = str(metadata.get("description", ""))
                 definition = _tool_definition(tool, template, available=True)
+                definition["configured_value"] = metadata.get("numeric_value")
                 definition["default_visible"] = category is not None
                 schema.append(definition)
                 found_names.add(variable)
@@ -163,6 +164,7 @@ def schema_for(
                 "group": f"Shared {category}",
                 "page": "tuning",
                 "description": str(metadata.get("description", "")),
+                "configured_value": metadata.get("numeric_value"),
                 "available": True,
                 "legacy_shared": True,
                 "layout_key": f"macro:{macro}:{variable}",
@@ -207,6 +209,7 @@ def schema_for(
                 "page": "setup",
                 "step": 0.1,
                 "description": str(metadata.get("description", "")),
+                "configured_value": metadata.get("numeric_value"),
                 "available": True,
                 "layout_key": f"macro:{macro}:{variable}",
                 "default_visible": False,
@@ -276,6 +279,8 @@ def _with_availability(
     result["available"] = (macro, variable) in discovered
     if result["available"] and discovered[(macro, variable)].get("description"):
         result.setdefault("description", str(discovered[(macro, variable)]["description"]))
+    if result["available"]:
+        result["configured_value"] = discovered[(macro, variable)].get("numeric_value")
     if not result["available"]:
         result["availability_reason"] = _missing_reason(macro, variable, discovery_error)
     return result

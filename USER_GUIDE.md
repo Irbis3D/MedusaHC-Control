@@ -92,6 +92,7 @@ state.
 - **Park current tool** calls `DROP_TOOL`. It uses the complete MedusaHC drop
   procedure, including the configured feeder handling and checks.
 - **Run cleaning cycle** calls the configured `CLEAN` macro.
+- **Test all tools** calls `TEST_TOOLS` to run the printer's complete rack test.
 - **Open feeder** calls `OPEN`.
 - **Close feeder** calls `CLOSE`.
 
@@ -188,6 +189,15 @@ during a print.
 This is temporary. Klipper reload or restart restores the value stored in the
 configuration.
 
+### Reset
+
+**Reset** sends the value currently stored in `MHC_variables.cfg` back to the
+running macro. For tool offsets, it uses the value currently stored by
+Klipper's `[save_variables]` system. This reverses an accidental **Apply**
+without writing either configuration file. The stored value is displayed below
+the controls as **Config**. Reset is unavailable when no numeric stored value
+can be read.
+
 ### Save to config
 
 **Save to config** is permanent and always displays a warning before writing.
@@ -234,6 +244,9 @@ comment simply means that no automatic description is shown.
 Custom visibility, order, and descriptions are stored only in the local
 MedusaHC Control database. They do not edit the printer configuration. Press
 **Reset automatic layout** to return to the standard detected layout.
+Normal package updates reuse this database and keep the customized variables,
+order, visibility and descriptions. They are removed only by an explicit
+layout reset, an uninstall with `--purge`, or manual database deletion.
 
 ## Printer settings
 

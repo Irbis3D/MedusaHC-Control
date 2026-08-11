@@ -29,6 +29,7 @@ ACTION_CAPABILITY = {
     "select_tool": "can_select",
     "drop_tool": "can_drop",
     "clean": "can_clean",
+    "test_tools": "can_select",
     "feeder_open": "can_feeder",
     "feeder_close": "can_feeder",
     "calibrate_xyz": "can_calibrate",
@@ -42,7 +43,7 @@ ACTION_CAPABILITY = {
 }
 
 QUEUED_ACTIONS = {
-    "home", "home_axis", "select_tool", "drop_tool", "clean",
+    "home", "home_axis", "select_tool", "drop_tool", "clean", "test_tools",
     "feeder_open", "feeder_close", "calibrate_xyz", "calibrate_z",
     "calibrate_bed", "calibrate_z_tilt",
 }
@@ -153,6 +154,7 @@ class ControlService:
         state = self.state()
         schema, discovery_warning = self._settings_schema(state)
         macro_values = state.get("macro_values", {})
+        saved_variables = state.get("saved_variables", {})
         values: dict[str, float | int] = {}
         for definition in schema:
             if not definition.get("available", True):
@@ -162,6 +164,10 @@ class ControlService:
             current = macro_values.get(macro, {})
             if variable in current:
                 values[str(definition["key"])] = current[variable]
+            if definition.get("kind") == "tool_offset":
+                saved_variable = str(definition.get("saved_variable", ""))
+                if saved_variable in saved_variables:
+                    definition["configured_value"] = saved_variables[saved_variable]
         layout = self.database.settings_layout()
         self._apply_settings_layout(schema, layout)
         return {
@@ -366,7 +372,9 @@ class ControlService:
         if definition.get("page") == "setup" and print_active:
             raise SafetyError("Printer setup parameters can only be changed while the printer is idle")
         if self._simulator is not None:
-            self._simulator.set_setting(definition, numeric)
+            self._simulator.set_setting(definition, numeric, permanent=mode == "permanent")
+            with self._state_lock:
+                self._state = self._simulator.snapshot()
         else:
             assert self._moonraker is not None
             self._send_setting(definition, numeric)
@@ -418,6 +426,7 @@ class ControlService:
             "home": "home all axes",
             "drop_tool": "park current tool",
             "clean": "run cleaning cycle",
+            "test_tools": "run tool test sequence",
             "feeder_open": "open feeder",
             "feeder_close": "close feeder",
             "calibrate_xyz": "start XYZ tool calibration",
@@ -479,6 +488,8 @@ class ControlService:
             return "DROP_TOOL"
         if action == "clean":
             return "CLEAN"
+        if action == "test_tools":
+            return "TEST_TOOLS"
         if action == "feeder_open":
             return "OPEN"
         if action == "feeder_close":

@@ -241,7 +241,7 @@ function renderSensors(state) {
 
 function updateActionAvailability(state) {
   const mapping = {
-    home: "can_home", select_tool: "can_select", drop_tool: "can_drop", clean: "can_clean",
+    home: "can_home", select_tool: "can_select", drop_tool: "can_drop", clean: "can_clean", test_tools: "can_select",
     feeder_open: "can_feeder", feeder_close: "can_feeder", calibrate_xyz: "can_calibrate",
     calibrate_z: "can_calibrate", calibrate_bed: "can_calibrate", calibrate_z_tilt: "can_calibrate",
     restart_klipper: "can_system", restart_firmware: "can_system", reboot_device: "can_system",
@@ -272,7 +272,7 @@ async function runAction(action, payload = {}) {
   const labels = {
     home: "Homing started", home_axis: `Homing ${payload.axis}`, jog: `Moving ${payload.axis}`,
     select_tool: `Selecting T${payload.tool}`, drop_tool: "Parking current tool",
-    clean: "Cleaning cycle started", feeder_open: "Opening feeder", feeder_close: "Closing feeder",
+    clean: "Cleaning cycle started", test_tools: "Tool test sequence started", feeder_open: "Opening feeder", feeder_close: "Closing feeder",
     calibrate_xyz: "XYZ calibration started", calibrate_z: "Z calibration started", calibrate_bed: "Bed calibration started", calibrate_z_tilt: "Z Tilt started",
     set_temperature: `Temperature target sent to T${payload.tool}`, emergency_stop: "Emergency stop sent",
     restart_klipper: "Klipper restart requested", restart_firmware: "Firmware restart requested", reboot_device: "Device reboot requested",
@@ -297,7 +297,7 @@ async function setControlMode(enabled) {
   }
 }
 
-const destructiveActions = new Set(["home", "select_tool", "drop_tool", "clean", "feeder_open", "feeder_close", "calibrate_xyz", "calibrate_z", "calibrate_bed", "calibrate_z_tilt", "emergency_stop", "restart_klipper", "restart_firmware", "reboot_device"]);
+const destructiveActions = new Set(["home", "select_tool", "drop_tool", "clean", "test_tools", "feeder_open", "feeder_close", "calibrate_xyz", "calibrate_z", "calibrate_bed", "calibrate_z_tilt", "emergency_stop", "restart_klipper", "restart_firmware", "reboot_device"]);
 const alwaysConfirmActions = new Set(["restart_klipper", "restart_firmware", "reboot_device"]);
 
 function confirmAction(action, payload = {}) {
@@ -305,6 +305,7 @@ function confirmAction(action, payload = {}) {
     select_tool: `The toolhead will move to pick up T${payload.tool}. Keep the movement area clear.`,
     drop_tool: "The toolhead will move to park the current tool.",
     clean: "The active tool will move through the configured prime and brush positions.",
+    test_tools: "The TEST_TOOLS macro will check the complete tool rack. Keep the full movement area clear.",
     feeder_open: "The extruder motor will operate the feeder latch.",
     feeder_close: "The extruder motor will operate the feeder latch.",
     home: "The printer will home all axes.",
@@ -372,6 +373,8 @@ function renderSettings(payload) {
     const setupLocked = definition.page === "setup" && ["printing", "paused"].includes(app.state?.print_state);
     const runtimeDisabled = available && runtimeAvailable && !setupLocked ? "" : "disabled";
     const fileDisabled = available && fileAvailable && !setupLocked ? "" : "disabled";
+    const hasConfiguredValue = definition.configured_value !== undefined && definition.configured_value !== null && Number.isFinite(Number(definition.configured_value));
+    const resetDisabled = available && runtimeAvailable && !setupLocked && hasConfiguredValue ? "" : "disabled";
     const inputDisabled = available ? "" : "disabled";
     const minimum = definition.min === undefined ? "" : ` min="${escapeHtml(definition.min)}"`;
     const maximum = definition.max === undefined ? "" : ` max="${escapeHtml(definition.max)}"`;
@@ -381,7 +384,8 @@ function renderSettings(payload) {
     const historyPanel = `<details class="setting-history"><summary>Recent values <span>${history.length}/10</span></summary><div>${history.length ? history.map(item => `<button type="button" data-history-key="${escapeHtml(definition.key)}" data-history-value="${escapeHtml(item.value)}"><strong>${escapeHtml(item.value)}</strong><span>${item.mode === "permanent" ? "Config" : "Applied"} · ${new Date(item.created_at * 1000).toLocaleString()}</span></button>`).join("") : `<p>No values entered through the panel yet.</p>`}</div></details>`;
     const description = definition.description ? `<p class="setting-description">${escapeHtml(definition.description).replaceAll("\n", "<br>")}</p>` : "";
     const unavailable = available ? "" : `<p class="setting-unavailable"><strong>Variable not found.</strong><span>${escapeHtml(definition.availability_reason || definition.variable)}</span></p>`;
-    return `<div class="setting-row ${available ? "" : "setting-row-unavailable"}" draggable="true" data-layout-key="${escapeHtml(definition.layout_key)}"><label>${escapeHtml(definition.label)}<span>${escapeHtml(definition.unit || "")}</span></label>${description}<div class="setting-control">${input}<button data-setting-mode="runtime" data-setting-key="${escapeHtml(definition.key)}" ${runtimeDisabled}>Apply</button><button class="permanent" data-setting-mode="permanent" data-setting-key="${escapeHtml(definition.key)}" ${fileDisabled}>Save to config</button></div>${unavailable}${historyPanel}</div>`;
+    const configured = hasConfiguredValue ? `<p class="configured-value">Config: <strong>${escapeHtml(definition.configured_value)}</strong></p>` : "";
+    return `<div class="setting-row ${available ? "" : "setting-row-unavailable"}" draggable="true" data-layout-key="${escapeHtml(definition.layout_key)}"><label>${escapeHtml(definition.label)}<span>${escapeHtml(definition.unit || "")}</span></label>${description}<div class="setting-control">${input}<button data-setting-mode="runtime" data-setting-key="${escapeHtml(definition.key)}" ${runtimeDisabled}>Apply</button><button class="reset" data-setting-reset="${escapeHtml(definition.key)}" title="Apply the value currently stored in the printer configuration" ${resetDisabled}>Reset</button><button class="permanent" data-setting-mode="permanent" data-setting-key="${escapeHtml(definition.key)}" ${fileDisabled}>Save to config</button></div>${configured}${unavailable}${historyPanel}</div>`;
   };
   const groupDescriptions = {
     "Cleaning and priming": "Shared machine positions used by every tool during priming and brush moves.",
@@ -408,7 +412,7 @@ function renderSettings(payload) {
   const toolPanel = tools.length ? `<section class="settings-group tool-settings-group"><div class="tool-settings-heading"><div><span class="kicker">SELECT ACTIVE PROFILE</span><h3>Tool-specific tuning</h3><p>Only the selected tool is shown below.</p></div><div class="tool-tabs" aria-label="Tool profile">${tools.map(tool => `<button class="${tool === app.settingsTool ? "active" : ""}" data-settings-tool="${tool}">T${tool}</button>`).join("")}</div></div><div class="selected-tool-banner"><strong>T${app.settingsTool}</strong><span>Editing priming, cleaning and offset values for tool T${app.settingsTool}</span></div><div class="tuning-category-grid">${Object.entries(categories).map(([category, definitions]) => `<section class="setting-category category-${category.toLowerCase().replaceAll(" ", "-")}"><div class="setting-category-heading"><div><span class="category-marker"></span><h4>${escapeHtml(category)}</h4></div><p>${escapeHtml(categoryDescriptions[category] || "")}</p></div><div class="settings-grid">${definitions.map(row).join("")}</div></section>`).join("")}</div></section>` : "";
   if (app.settingsPage === "tuning") {
     const sharedTuning = general ? `<div class="global-tuning-groups">${general}</div>` : "";
-    $("#tuning-groups").innerHTML = `${discoveryWarning}<section class="tuning-guide"><div><strong>Apply</strong><span>Changes the running value immediately and resets after restart.</span></div><div><strong>Save to config</strong><span>Permanently replaces the stored value after confirmation.</span></div></section>${toolPanel}${sharedTuning}`;
+    $("#tuning-groups").innerHTML = `${discoveryWarning}<section class="tuning-guide"><div class="guide-apply"><strong>Apply</strong><span>Changes the running value immediately and resets after restart.</span></div><div class="guide-reset"><strong>Reset</strong><span>Restores the currently saved configuration value without writing a file.</span></div><div class="guide-save"><strong>Save to config</strong><span>Permanently replaces the stored value after confirmation.</span></div></section>${toolPanel}${sharedTuning}`;
   } else {
     $("#printer-settings-groups").innerHTML = `${discoveryWarning}<section class="setup-warning"><strong>Idle printer required</strong><span>Permanent changes require confirmation. Verify dock movement at low speed after changing geometry.</span></section>${general}`;
   }
@@ -606,6 +610,12 @@ document.addEventListener("click", event => {
     return setting.dataset.settingMode === "permanent"
       ? confirmPermanentSetting(setting.dataset.settingKey)
       : changeSetting(setting.dataset.settingKey, "runtime");
+  }
+  const resetSetting = event.target.closest("[data-setting-reset]");
+  if (resetSetting) {
+    const definition = app.settings?.schema?.find(item => item.key === resetSetting.dataset.settingReset);
+    if (!definition || definition.configured_value === undefined || definition.configured_value === null) return;
+    return changeSetting(definition.key, "runtime", definition.configured_value);
   }
   const historyValue = event.target.closest("[data-history-value]");
   if (historyValue) {

@@ -60,6 +60,8 @@ class VariableInspectionTests(unittest.TestCase):
         schema = schema_for(1, inspect_variable_config(CURRENT_CONFIG))
         by_key = {item["key"]: item for item in schema}
         self.assertTrue(by_key["t0_prime_amount"]["available"])
+        self.assertEqual(by_key["t0_prime_amount"]["configured_value"], 18)
+        self.assertEqual(by_key["y_safe"]["configured_value"], 330)
         self.assertEqual(by_key["t0_prime_amount"]["label"], "prime_amount")
         self.assertTrue(by_key["t0_x_clean_move"]["default_visible"])
         self.assertTrue(by_key["t0_ptfe_clean_slow_speed"]["default_visible"])
@@ -87,6 +89,39 @@ class VariableInspectionTests(unittest.TestCase):
 
 
 class LayoutDatabaseTests(unittest.TestCase):
+    def test_runtime_reset_source_remains_saved_configuration(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            service = ControlService(AppConfig(
+                simulate=True,
+                database_path=str(Path(directory) / "stats.db"),
+            ))
+            try:
+                initial = service.settings_payload()
+                offset = next(item for item in initial["schema"] if item["key"] == "t0_offset_x")
+                self.assertEqual(offset["configured_value"], 0)
+
+                service.set_setting("t0_offset_x", 1.25, "runtime")
+                temporary = service.settings_payload()
+                offset = next(item for item in temporary["schema"] if item["key"] == "t0_offset_x")
+                self.assertEqual(temporary["values"]["t0_offset_x"], 1.25)
+                self.assertEqual(offset["configured_value"], 0)
+
+                service.set_setting("t0_offset_x", 0, "runtime")
+                restored = service.settings_payload()
+                self.assertEqual(restored["values"]["t0_offset_x"], 0)
+            finally:
+                service.stop()
+
+    def test_tool_test_action_calls_configured_macro(self) -> None:
+        self.assertEqual(ControlService._gcode("test_tools", {}), "TEST_TOOLS")
+        with tempfile.TemporaryDirectory() as directory:
+            service = ControlService(AppConfig(
+                simulate=True,
+                database_path=str(Path(directory) / "stats.db"),
+            ))
+            self.assertTrue(service.execute("test_tools", {})["ok"])
+            service.stop()
+
     def test_layout_defaults_customizes_and_resets(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             database = StatsDatabase(str(Path(directory) / "stats.db"))
@@ -98,6 +133,31 @@ class LayoutDatabaseTests(unittest.TestCase):
             self.assertEqual(layout["entries"][0]["description"], "Local text")
             self.assertFalse(database.reset_settings_layout()["customized"])
             database.close()
+
+    def test_custom_layout_survives_service_update_restart(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            database_path = str(Path(directory) / "stats.db")
+            first = ControlService(AppConfig(simulate=True, database_path=database_path))
+            first.save_settings_layout([
+                {"layout_key": "tool:prime_amount", "description": "My retained field"},
+                {"layout_key": "tool:clean_retract", "description": "Second retained field"},
+            ])
+            first.stop()
+
+            updated = ControlService(AppConfig(simulate=True, database_path=database_path))
+            try:
+                payload = updated.settings_payload()
+                visible = {
+                    item["layout_key"]: item["description"]
+                    for item in payload["schema"]
+                    if item["visible"]
+                }
+                self.assertEqual(visible, {
+                    "tool:prime_amount": "My retained field",
+                    "tool:clean_retract": "Second retained field",
+                })
+            finally:
+                updated.stop()
 
     def test_service_starts_with_modern_layout_and_can_customize_it(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

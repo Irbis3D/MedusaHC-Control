@@ -228,10 +228,11 @@ button:hover:not(:disabled) { background: #424242; }
 .calibration-card button { margin-top: auto; }
 
 .settings-groups { display: grid; gap: 12px; }
-.tuning-guide { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; overflow: hidden; border-left: 4px solid var(--blue); border-radius: 4px; background: var(--border-soft); box-shadow: var(--shadow); }
+.tuning-guide { display: grid; grid-template-columns: repeat(3,1fr); gap: 1px; overflow: hidden; border-left: 4px solid var(--blue); border-radius: 4px; background: var(--border-soft); box-shadow: var(--shadow); }
 .tuning-guide div { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 9px; padding: 11px 13px; background: #1d2730; }
 .tuning-guide strong { color: #90caf9; font-size: 11px; }
-.tuning-guide div:last-child strong { color: #ffb74d; }
+.tuning-guide .guide-reset strong { color: #80cbc4; }
+.tuning-guide .guide-save strong { color: #ffb74d; }
 .tuning-guide span, .setup-warning span { color: var(--muted); font-size: 10px; }
 .setup-warning { min-height: 48px; display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-left: 4px solid var(--orange); border-radius: 4px; background: rgba(255,152,0,.08); box-shadow: var(--shadow); }
 .setup-warning strong { color: #ffb74d; font-size: 11px; white-space: nowrap; }
@@ -250,10 +251,13 @@ button:hover:not(:disabled) { background: #424242; }
 .setting-unavailable strong { color: #ef9a9a; font-weight: 500; }
 .setting-unavailable span { overflow-wrap: anywhere; }
 .setting-row-unavailable .setting-control { opacity: .55; }
-.setting-control { display: grid; grid-template-columns: minmax(84px,1fr) auto auto; gap: 6px; }
+.setting-control { display: grid; grid-template-columns: minmax(72px,1fr) auto auto auto; gap: 6px; }
 .setting-control button { border: 0; border-radius: 3px; background: #3a3a3a; padding: 0 9px; font-size: 9px; }
 .setting-control button.save { background: var(--blue-dark); color: #fff; }
 .setting-control button.permanent { border: 1px solid rgba(255,152,0,.55); background: transparent; color: #ffb74d; }
+.setting-control button.reset { border: 1px solid rgba(144,202,249,.35); background: transparent; color: #90caf9; }
+.configured-value { margin: 6px 0 0; color: var(--muted); font-size: 8px; text-align: right; }
+.configured-value strong { color: #90caf9; font-family: Consolas,"Courier New",monospace; font-weight: 500; }
 .setting-history { margin-top: 7px; border-top: 1px solid var(--border-soft); }
 .setting-history summary { display: flex; justify-content: space-between; padding-top: 7px; color: var(--muted); font-size: 9px; cursor: pointer; user-select: none; }
 .setting-history summary span { color: rgba(255,255,255,.38); }
@@ -409,7 +413,8 @@ dialog form { padding: 22px; }
   .z-controls .jog-button { min-height: 62px; }
   .split-buttons { grid-template-columns: 1fr; }
   .settings-grid { grid-template-columns: 1fr; }
-  .setting-control { grid-template-columns: minmax(0,1fr) 1fr 1.35fr; }
+  .setting-control { grid-template-columns: repeat(3,1fr); }
+  .setting-control input, .setting-control select { grid-column: 1/-1; }
   .setting-control button { min-height: 38px; padding-inline: 5px; }
   .tool-settings-heading { align-items: flex-start; flex-direction: column; }
   .tool-tabs { width: 100%; flex-wrap: nowrap; overflow-x: auto; padding-bottom: 3px; }

@@ -32,6 +32,7 @@ does not yet provide the complete setup wizard planned for future versions.
 
 - Show the active tool, dock sensors, feeder state and connection state.
 - Select and park tools and open or close the feeder.
+- Run the configured `TEST_TOOLS` rack test from the manual control panel.
 - Set individual tool temperatures and cool tools down.
 - Show the Moonraker camera stream.
 - Home and move the printer axes.
@@ -47,6 +48,7 @@ does not yet provide the complete setup wizard planned for future versions.
 - Keep expected settings visible but disabled when a variable is missing,
   instead of failing to load the settings page.
 - Apply supported values temporarily during the current Klipper session.
+- Restore a temporarily changed value from its current saved configuration.
 - Save supported values permanently to the appropriate configuration file
   after a warning and confirmation.
 - Keep the ten most recent values entered for each supported setting.

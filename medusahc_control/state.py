@@ -18,6 +18,10 @@ def normalize_status(status: dict[str, Any]) -> dict[str, Any]:
     global_state = _macro(status, "GLOBAL_STATE")
     tool_cfg = _macro(status, "TOOL_CFG")
     offsets = _macro(status, "TOOL_OFFSET")
+    save_variables = status.get("save_variables", {}) or {}
+    saved_values = save_variables.get("variables", {}) if isinstance(save_variables, dict) else {}
+    if not isinstance(saved_values, dict):
+        saved_values = {}
     pin_watch = status.get("mhc_dashboard", {}) or status.get("pin_watch io", {}) or {}
     tool_count = _tool_count(status, global_state, pin_watch)
     current_tool = int(pin_watch.get("current_tool", -2))
@@ -109,6 +113,7 @@ def normalize_status(status: dict[str, Any]) -> dict[str, Any]:
         "sensors": {str(key): int(value) for key, value in raw_sensors.items()},
         "settings": settings,
         "macro_values": macro_values,
+        "saved_variables": _numeric_variables(saved_values),
         "capabilities": {
             "can_home": ready and not printing,
             "can_jog": ready and not printing,
@@ -176,6 +181,7 @@ def disconnected_state(message: str) -> dict[str, Any]:
         "sensors": {},
         "settings": {},
         "macro_values": {},
+        "saved_variables": {},
         "capabilities": {key: False for key in ("can_home", "can_jog", "can_heat", "can_select", "can_drop", "can_clean", "can_feeder", "can_calibrate", "can_edit", "can_system")},
         "message": message,
     }
@@ -229,6 +235,7 @@ class Simulator:
                 **{f"x_t{i}": 17 + i * 57 for i in range(tool_count)},
             },
             "gcode_macro TOOL_OFFSET": {},
+            "save_variables": {"variables": {}},
         }
         for index in range(tool_count):
             raw["extruder" if index == 0 else f"extruder{index}"] = {"temperature": 24.0 + index * 0.3, "target": 0.0, "power": 0.0}
@@ -245,6 +252,11 @@ class Simulator:
                 f"t{index}_off_x": 0.0,
                 f"t{index}_off_y": 0.0,
                 f"t{index}_off_z": 0.0,
+            })
+            raw["save_variables"]["variables"].update({
+                f"t{index}_gcode_x_offset": 0.0,
+                f"t{index}_gcode_y_offset": 0.0,
+                f"t{index}_gcode_z_offset": 0.0,
             })
         return raw
 
@@ -307,10 +319,14 @@ class Simulator:
         elif action == "jog":
             axis_index = {"X": 0, "Y": 1, "Z": 2}[str(payload["axis"]).upper()]
             self._state["toolhead"]["position"][axis_index] += float(payload["distance"])
-        elif action in {"clean", "calibrate_xyz", "calibrate_z", "calibrate_bed", "calibrate_z_tilt", "emergency_stop", "restart_klipper", "restart_firmware", "reboot_device"}:
+        elif action in {"clean", "test_tools", "calibrate_xyz", "calibrate_z", "calibrate_bed", "calibrate_z_tilt", "emergency_stop", "restart_klipper", "restart_firmware", "reboot_device"}:
             if action == "emergency_stop":
                 self._state["webhooks"]["state"] = "shutdown"
 
-    def set_setting(self, definition: dict[str, Any], value: float | int) -> None:
+    def set_setting(
+        self, definition: dict[str, Any], value: float | int, *, permanent: bool = False
+    ) -> None:
         macro = f"gcode_macro {definition['macro']}"
         self._state.setdefault(macro, {})[definition["variable"]] = value
+        if permanent and definition.get("kind") == "tool_offset" and definition.get("saved_variable"):
+            self._state["save_variables"]["variables"][definition["saved_variable"]] = value
