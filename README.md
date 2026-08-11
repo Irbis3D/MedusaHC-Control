@@ -48,10 +48,14 @@ does not yet provide the complete setup wizard planned for future versions.
 - Keep expected settings visible but disabled when a variable is missing,
   instead of failing to load the settings page.
 - Apply supported values temporarily during the current Klipper session.
+- Convert MedusaHC motion values from mm/s to Klipper feedrates automatically
+  when the installed configuration exposes the corresponding runtime variables.
 - Restore a temporarily changed value from its current saved configuration.
 - Save supported values permanently to the appropriate configuration file
   after a warning and confirmation.
 - Keep the ten most recent values entered for each supported setting.
+- Keep variables below a `Do not change` marker out of the automatic layout,
+  while leaving them available in the variable customizer for advanced use.
 - Count tool pickups, parking operations and failed changes during printing.
 - Restart Klipper, restart the firmware or reboot the printer host.
 - Switch between monitoring mode and active control mode.

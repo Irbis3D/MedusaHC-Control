@@ -186,6 +186,19 @@ easy.
 value takes effect immediately and can be used to tune priming and cleaning
 during a print.
 
+The current MedusaHC configuration stores `fast_speed`, `slow_speed`, and
+`clean_speed` in mm/s, but its movement macros use the corresponding
+`GLOBAL_STATE` feedrates in mm/min. When one of these three speed fields is
+applied, reset, or saved, the panel updates both values immediately:
+
+- `fast_speed` also sets `fast_feedrate = fast_speed × 60`;
+- `slow_speed` also sets `slow_feedrate = slow_speed × 60`;
+- `clean_speed` also sets `clean_feedrate = clean_speed × 60`.
+
+`fast_accel` is already used directly in mm/s² and is not converted. Older
+MedusaHC configurations that do not contain the derived feedrate variable are
+still supported; in that case the panel changes only the variable that exists.
+
 This is temporary. Klipper reload or restart restores the value stored in the
 configuration.
 
@@ -231,6 +244,11 @@ Press **Customize variables** to:
 - show or hide discovered variables;
 - add an optional local description;
 - keep uncommon internal variables hidden until they are needed.
+
+Variables declared after a `Do not change` or `Do not edit` comment are treated
+as internal runtime variables. They are not included in the automatic layout,
+but they remain searchable and can still be added manually. The panel does not
+forbid advanced access to them.
 
 After saving, drag visible cards with the mouse inside their section to change
 their order.

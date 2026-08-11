@@ -14,9 +14,9 @@ BASE_SETTINGS: tuple[dict[str, Any], ...] = (
     {"key": "y_brush", "macro": "TOOL_CFG", "variable": "y_brush", "label": "Brush Y", "group": "Cleaning and priming", "unit": "mm", "min": -150, "max": 500, "step": 0.1},
     {"key": "x_prime_shift", "macro": "TOOL_CFG", "variable": "x_prime_shift", "label": "Prime X shift", "group": "Cleaning and priming", "unit": "mm", "min": -50, "max": 50, "step": 0.1},
     {"key": "fast_accel", "macro": "TOOL_CFG", "variable": "fast_accel", "label": "Toolchange acceleration", "group": "Motion", "unit": "mm/s²", "min": 100, "max": 40000, "step": 100},
-    {"key": "fast_speed", "macro": "TOOL_CFG", "variable": "fast_speed", "label": "Fast movement", "group": "Motion", "unit": "mm/s", "min": 1, "max": 600, "step": 1},
-    {"key": "slow_speed", "macro": "TOOL_CFG", "variable": "slow_speed", "label": "Docking movement", "group": "Motion", "unit": "mm/s", "min": 1, "max": 200, "step": 1},
-    {"key": "clean_speed", "macro": "TOOL_CFG", "variable": "clean_speed", "label": "Brush movement", "group": "Motion", "unit": "mm/s", "min": 1, "max": 300, "step": 1},
+    {"key": "fast_speed", "macro": "TOOL_CFG", "variable": "fast_speed", "label": "Fast movement", "group": "Motion", "unit": "mm/s", "min": 1, "max": 600, "step": 1, "runtime_targets": [{"macro": "GLOBAL_STATE", "variable": "fast_feedrate", "multiplier": 60}]},
+    {"key": "slow_speed", "macro": "TOOL_CFG", "variable": "slow_speed", "label": "Docking movement", "group": "Motion", "unit": "mm/s", "min": 1, "max": 200, "step": 1, "runtime_targets": [{"macro": "GLOBAL_STATE", "variable": "slow_feedrate", "multiplier": 60}]},
+    {"key": "clean_speed", "macro": "TOOL_CFG", "variable": "clean_speed", "label": "Brush movement", "group": "Motion", "unit": "mm/s", "min": 1, "max": 300, "step": 1, "runtime_targets": [{"macro": "GLOBAL_STATE", "variable": "clean_feedrate", "multiplier": 60}]},
     {"key": "e_open", "macro": "TOOL_CFG", "variable": "e_open", "label": "Feeder open movement", "group": "Feeder", "unit": "mm", "min": -30, "max": 30, "step": 0.1},
     {"key": "e_close", "macro": "TOOL_CFG", "variable": "e_close", "label": "Feeder close movement", "group": "Feeder", "unit": "mm", "min": -30, "max": 30, "step": 0.1},
     {"key": "e_cur_high_mult", "macro": "TOOL_CFG", "variable": "e_cur_high_mult", "label": "Feeder current multiplier", "group": "Feeder", "min": 1, "max": 2.2, "step": 0.05},
@@ -57,17 +57,24 @@ def inspect_variable_config(text: str) -> dict[tuple[str, str], dict[str, Any]]:
     discovered: dict[tuple[str, str], dict[str, Any]] = {}
     macro = ""
     pending_comments: list[str] = []
+    internal_block = False
     for line_number, line in enumerate(text.splitlines(), start=1):
         section_match = _SECTION_RE.match(line)
         if section_match:
             macro = section_match.group(1).strip()
             pending_comments = []
+            internal_block = False
             continue
         if not macro:
             continue
         comment_match = _COMMENT_RE.match(line)
         if comment_match:
-            pending_comments.append(comment_match.group(1).strip())
+            comment = comment_match.group(1).strip()
+            if re.search(r"\bdo\s+not\s+(?:change|edit)\b", comment, re.IGNORECASE):
+                internal_block = True
+                pending_comments = []
+                continue
+            pending_comments.append(comment)
             continue
         if not line.strip():
             pending_comments = []
@@ -84,6 +91,7 @@ def inspect_variable_config(text: str) -> dict[tuple[str, str], dict[str, Any]]:
             "raw_value": raw_value.strip(),
             "numeric_value": numeric_value,
             "description": "\n".join(item for item in pending_comments if item).strip(),
+            "internal": internal_block,
             "line": line_number,
         }
         pending_comments = []
@@ -141,7 +149,8 @@ def schema_for(
                 template["description"] = str(metadata.get("description", ""))
                 definition = _tool_definition(tool, template, available=True)
                 definition["configured_value"] = metadata.get("numeric_value")
-                definition["default_visible"] = category is not None
+                definition["internal"] = bool(metadata.get("internal"))
+                definition["default_visible"] = category is not None and not definition["internal"]
                 schema.append(definition)
                 found_names.add(variable)
             for template in TOOL_SETTINGS:
@@ -165,10 +174,11 @@ def schema_for(
                 "page": "tuning",
                 "description": str(metadata.get("description", "")),
                 "configured_value": metadata.get("numeric_value"),
+                "internal": bool(metadata.get("internal")),
                 "available": True,
                 "legacy_shared": True,
                 "layout_key": f"macro:{macro}:{variable}",
-                "default_visible": True,
+                "default_visible": not bool(metadata.get("internal")),
             })
             schema.append(template)
 
@@ -210,6 +220,7 @@ def schema_for(
                 "step": 0.1,
                 "description": str(metadata.get("description", "")),
                 "configured_value": metadata.get("numeric_value"),
+                "internal": bool(metadata.get("internal")),
                 "available": True,
                 "layout_key": f"macro:{macro}:{variable}",
                 "default_visible": False,
@@ -280,7 +291,11 @@ def _with_availability(
     if result["available"] and discovered[(macro, variable)].get("description"):
         result.setdefault("description", str(discovered[(macro, variable)]["description"]))
     if result["available"]:
-        result["configured_value"] = discovered[(macro, variable)].get("numeric_value")
+        metadata = discovered[(macro, variable)]
+        result["configured_value"] = metadata.get("numeric_value")
+        result["internal"] = bool(metadata.get("internal"))
+        if result["internal"]:
+            result["default_visible"] = False
     if not result["available"]:
         result["availability_reason"] = _missing_reason(macro, variable, discovery_error)
     return result

@@ -49,6 +49,25 @@ variable_prime_speed: 5
 """
 
 
+INTERNAL_CONFIG = """
+[gcode_macro TOOL_CFG]
+variable_fast_speed: 300
+variable_slow_speed: 40
+variable_clean_speed: 50
+
+[gcode_macro GLOBAL_STATE]
+#------------- Do not change ---------------
+variable_eddy_z: 0
+variable_layer: 0
+variable_fast_feedrate: 0
+variable_slow_feedrate: 0
+variable_clean_feedrate: 0
+
+[gcode_macro TOOL_STATE_0]
+variable_prime_amount: 13
+"""
+
+
 class VariableInspectionTests(unittest.TestCase):
     def test_direct_comments_are_descriptions(self) -> None:
         discovered = inspect_variable_config(CURRENT_CONFIG)
@@ -81,6 +100,19 @@ class VariableInspectionTests(unittest.TestCase):
         self.assertFalse(definition["available"])
         self.assertIn("variable_y_safe", definition["availability_reason"])
 
+    def test_do_not_change_block_is_available_but_hidden_by_default(self) -> None:
+        discovered = inspect_variable_config(INTERNAL_CONFIG)
+        self.assertTrue(discovered[("GLOBAL_STATE", "clean_feedrate")]["internal"])
+        self.assertFalse(discovered[("TOOL_STATE_0", "prime_amount")]["internal"])
+
+        schema = schema_for(1, discovered)
+        by_key = {item["key"]: item for item in schema}
+        self.assertTrue(by_key["eddy_z"]["available"])
+        self.assertFalse(by_key["eddy_z"]["default_visible"])
+        self.assertTrue(by_key["global_clean_feedrate"]["available"])
+        self.assertFalse(by_key["global_clean_feedrate"]["default_visible"])
+        self.assertTrue(by_key["t0_prime_amount"]["default_visible"])
+
     def test_permanent_replacement_preserves_comment(self) -> None:
         text = "[gcode_macro TOOL_STATE_0]\n# User-facing description.\nvariable_prime_amount: 10 # inline\n"
         replaced = ConfigStore._replace_macro_variable(text, "TOOL_STATE_0", "prime_amount", 12.5)
@@ -89,6 +121,40 @@ class VariableInspectionTests(unittest.TestCase):
 
 
 class LayoutDatabaseTests(unittest.TestCase):
+    def test_speed_apply_updates_source_and_runtime_feedrate(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            service = ControlService(AppConfig(
+                simulate=True,
+                database_path=str(Path(directory) / "stats.db"),
+            ))
+            try:
+                definition = next(
+                    item for item in service.settings_payload()["schema"]
+                    if item["key"] == "fast_speed"
+                )
+                self.assertEqual(definition["active_runtime_targets"], [{
+                    "macro": "GLOBAL_STATE",
+                    "variable": "fast_feedrate",
+                    "multiplier": 60,
+                }])
+                service.set_setting("fast_speed", 275, "runtime")
+                state = service.state()
+                self.assertEqual(state["macro_values"]["TOOL_CFG"]["fast_speed"], 275)
+                self.assertEqual(state["macro_values"]["GLOBAL_STATE"]["fast_feedrate"], 16500)
+            finally:
+                service.stop()
+
+    def test_speed_apply_skips_missing_legacy_runtime_feedrate(self) -> None:
+        definition = {
+            "macro": "TOOL_CFG",
+            "variable": "fast_speed",
+            "active_runtime_targets": [],
+        }
+        self.assertEqual(
+            ControlService._runtime_setting_updates(definition, 300),
+            [("TOOL_CFG", "fast_speed", 300.0)],
+        )
+
     def test_stale_poll_cannot_overwrite_just_applied_runtime_value(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             service = ControlService(AppConfig(

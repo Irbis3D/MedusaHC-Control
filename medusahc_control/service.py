@@ -257,6 +257,13 @@ class ControlService:
         )
         macro_values = state.get("macro_values", {})
         for definition in schema:
+            active_targets = []
+            for target in definition.get("runtime_targets", []):
+                target_macro = str(target.get("macro", ""))
+                target_variable = str(target.get("variable", ""))
+                if target_variable in macro_values.get(target_macro, {}):
+                    active_targets.append(dict(target))
+            definition["active_runtime_targets"] = active_targets
             if not definition.get("available", True):
                 continue
             macro = str(definition["macro"])
@@ -400,13 +407,12 @@ class ControlService:
         return {"ok": True, "key": key, "value": numeric, "mode": mode}
 
     def _remember_runtime_setting(self, definition: dict[str, Any], value: float | int) -> None:
-        macro = str(definition["macro"])
-        variable = str(definition["variable"])
         expires = time.monotonic() + max(3.0, float(self.config.poll_interval) * 3.0)
         with self._state_lock:
-            self._runtime_setting_overrides[(macro, variable)] = (value, expires)
             macro_values = self._state.setdefault("macro_values", {})
-            macro_values.setdefault(macro, {})[variable] = value
+            for macro, variable, runtime_value in self._runtime_setting_updates(definition, value):
+                self._runtime_setting_overrides[(macro, variable)] = (runtime_value, expires)
+                macro_values.setdefault(macro, {})[variable] = runtime_value
 
     def _merge_runtime_setting_overrides(self, state: dict[str, Any]) -> None:
         now = time.monotonic()
@@ -423,11 +429,31 @@ class ControlService:
 
     def _send_setting(self, definition: dict[str, Any], numeric: float | int) -> None:
         assert self._moonraker is not None
-        self._moonraker.send_gcode(
-            f'RESPOND TYPE=command MSG="MedusaHC Control: apply {definition["label"]} = {numeric}"\n'
-            f"SET_GCODE_VARIABLE MACRO={definition['macro']} "
-            f"VARIABLE={definition['variable']} VALUE={numeric}"
+        commands = [
+            f'RESPOND TYPE=command MSG="MedusaHC Control: apply {definition["label"]} = {numeric}"'
+        ]
+        commands.extend(
+            f"SET_GCODE_VARIABLE MACRO={macro} VARIABLE={variable} VALUE={value:g}"
+            for macro, variable, value in self._runtime_setting_updates(definition, numeric)
         )
+        self._moonraker.send_gcode("\n".join(commands))
+
+    @staticmethod
+    def _runtime_setting_updates(
+        definition: dict[str, Any], value: float | int
+    ) -> list[tuple[str, str, float]]:
+        updates = [(
+            str(definition["macro"]),
+            str(definition["variable"]),
+            float(value),
+        )]
+        for target in definition.get("active_runtime_targets", []):
+            updates.append((
+                str(target["macro"]),
+                str(target["variable"]),
+                float(value) * float(target.get("multiplier", 1)),
+            ))
+        return updates
 
     def _announce(self, action: str, payload: dict[str, Any]) -> None:
         assert self._moonraker is not None

@@ -216,7 +216,11 @@ class Simulator:
             "print_stats": {"state": "standby", "filename": ""},
             "toolhead": {"homed_axes": "xyz", "position": [150.0, 150.0, 10.0, 0.0]},
             "pin_watch io": {"current_tool": -1, "sensors": {"e": 0, **{f"t{i}": 1 for i in range(tool_count)}}},
-            "gcode_macro GLOBAL_STATE": {"max_tool": tool_count, "target_tool": -1, "feeder_open": 0, "eddy_z": -0.09},
+            "gcode_macro GLOBAL_STATE": {
+                "max_tool": tool_count, "target_tool": -1, "feeder_open": 0,
+                "eddy_z": -0.09, "fast_feedrate": 30000,
+                "slow_feedrate": 2400, "clean_feedrate": 3000,
+            },
             "gcode_macro TOOL_CFG": {
                 "tools_direction": -1,
                 "y_safe": 300.0,
@@ -328,5 +332,9 @@ class Simulator:
     ) -> None:
         macro = f"gcode_macro {definition['macro']}"
         self._state.setdefault(macro, {})[definition["variable"]] = value
+        for target in definition.get("active_runtime_targets", []):
+            target_macro = f"gcode_macro {target['macro']}"
+            target_value = float(value) * float(target.get("multiplier", 1))
+            self._state.setdefault(target_macro, {})[target["variable"]] = target_value
         if permanent and definition.get("kind") == "tool_offset" and definition.get("saved_variable"):
             self._state["save_variables"]["variables"][definition["saved_variable"]] = value
