@@ -14,6 +14,7 @@ const app = {
   layoutPage: "tuning",
   layoutDraft: [],
   draggedLayoutKey: "",
+  reorderPage: "",
 };
 
 const $ = (selector, root = document) => root.querySelector(selector);
@@ -38,6 +39,11 @@ function toast(message, isError = false) {
 }
 
 function setView(name) {
+  const settingsPage = name === "tuning" ? "tuning" : name === "printer-settings" ? "setup" : "";
+  if (app.reorderPage && app.reorderPage !== settingsPage) {
+    app.reorderPage = "";
+    updateReorderControls();
+  }
   $$(".nav-item").forEach(item => item.classList.toggle("active", item.dataset.view === name));
   $$(".view").forEach(view => view.classList.toggle("active", view.id === `view-${name}`));
   const labels = {
@@ -356,6 +362,7 @@ async function loadSettings() {
 }
 
 function renderSettings(payload) {
+  const reorderEnabled = app.reorderPage === app.settingsPage;
   const generalGroups = {};
   const pageDefinitions = payload.schema
     .filter(item => item.page === app.settingsPage && item.visible !== false)
@@ -390,7 +397,8 @@ function renderSettings(payload) {
     const configuredLabel = configuredChoice?.label ?? definition.configured_value;
     const temporaryValueActive = hasConfiguredValue && value !== "" && Number(value) !== Number(definition.configured_value);
     const configured = hasConfiguredValue ? `<p class="configured-value ${temporaryValueActive ? "changed" : ""}">${temporaryValueActive ? "Temporary value active · " : ""}Saved config: <strong>${escapeHtml(configuredLabel)}</strong></p>` : "";
-    return `<div class="setting-row ${available ? "" : "setting-row-unavailable"}" draggable="true" data-layout-key="${escapeHtml(definition.layout_key)}"><label>${escapeHtml(definition.label)}<span>${escapeHtml(definition.unit || "")}</span></label>${description}<div class="setting-control">${input}<button data-setting-mode="runtime" data-setting-key="${escapeHtml(definition.key)}" ${runtimeDisabled}>Apply</button><button class="reset" data-setting-reset="${escapeHtml(definition.key)}" title="Apply the value currently stored in the printer configuration" ${resetDisabled}>Reset</button><button class="permanent" data-setting-mode="permanent" data-setting-key="${escapeHtml(definition.key)}" ${fileDisabled}>Save to config</button></div>${configured}${unavailable}${historyPanel}</div>`;
+    const reorderAttributes = reorderEnabled ? ` draggable="true" aria-grabbed="false"` : "";
+    return `<div class="setting-row ${available ? "" : "setting-row-unavailable"} ${reorderEnabled ? "reorder-enabled" : ""}"${reorderAttributes} data-layout-key="${escapeHtml(definition.layout_key)}"><label>${escapeHtml(definition.label)}<span>${escapeHtml(definition.unit || "")}</span></label>${description}<div class="setting-control">${input}<button data-setting-mode="runtime" data-setting-key="${escapeHtml(definition.key)}" ${runtimeDisabled}>Apply</button><button class="reset" data-setting-reset="${escapeHtml(definition.key)}" title="Apply the value currently stored in the printer configuration" ${resetDisabled}>Reset</button><button class="permanent" data-setting-mode="permanent" data-setting-key="${escapeHtml(definition.key)}" ${fileDisabled}>Save to config</button></div>${configured}${unavailable}${historyPanel}</div>`;
   };
   const groupDescriptions = {
     "Cleaning and priming": "Shared machine positions used by every tool during priming and brush moves.",
@@ -513,17 +521,39 @@ async function resetSettingsLayout() {
   } catch (error) { toast(error.message, true); }
 }
 
+function updateReorderControls() {
+  $$('[data-reorder-settings]').forEach(button => {
+    const active = app.reorderPage === button.dataset.reorderSettings;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
+    button.textContent = active ? "Finish reordering" : "Reorder variables";
+  });
+}
+
+function toggleReorderMode(page) {
+  app.reorderPage = app.reorderPage === page ? "" : page;
+  app.draggedLayoutKey = "";
+  $$(".dragging, .drag-target").forEach(item => item.classList.remove("dragging", "drag-target"));
+  updateReorderControls();
+  if (app.settings && app.settingsPage === page) renderSettings(app.settings);
+  toast(app.reorderPage ? "Reorder mode enabled. Drag variables within one section." : "Variable order locked");
+}
+
 async function persistRenderedOrder(grid) {
   const page = grid.closest("#view-tuning") ? "tuning" : "setup";
   const orderedKeys = $$(`[data-layout-key]`, grid).map(item => item.dataset.layoutKey);
   const draft = buildLayoutDraft();
-  const visibleOnPage = draft.filter(item => item.page === page && item.visible);
-  const visibleKeys = new Set(visibleOnPage.map(item => item.layout_key));
-  const completeOrder = [...orderedKeys, ...visibleOnPage.map(item => item.layout_key).filter(key => !orderedKeys.includes(key))];
+  const visibleOnPage = draft
+    .filter(item => item.page === page && item.visible)
+    .sort((left, right) => left.order - right.order);
+  const gridKeys = new Set(orderedKeys);
+  let gridIndex = 0;
+  const completeOrder = visibleOnPage.map(item => (
+    gridKeys.has(item.layout_key) ? orderedKeys[gridIndex++] : item.layout_key
+  ));
   const rank = new Map(completeOrder.map((key, index) => [key, index]));
-  const pageStart = Math.min(...visibleOnPage.map(item => item.order), 0);
   for (const item of draft) {
-    if (item.page === page && visibleKeys.has(item.layout_key)) item.order = pageStart + (rank.get(item.layout_key) ?? completeOrder.length);
+    if (item.page === page && item.visible) item.order = rank.get(item.layout_key) ?? completeOrder.length;
   }
   await saveSettingsLayout(visibleLayoutEntries(draft), false);
 }
@@ -577,6 +607,8 @@ document.addEventListener("click", event => {
   if (nav) return setView(nav.dataset.view);
   const customizeSettings = event.target.closest("[data-customize-settings]");
   if (customizeSettings) return openSettingsLayout(customizeSettings.dataset.customizeSettings);
+  const reorderSettings = event.target.closest("[data-reorder-settings]");
+  if (reorderSettings) return toggleReorderMode(reorderSettings.dataset.reorderSettings);
   const select = event.target.closest("[data-select-tool]");
   if (select) {
     const payload = {tool: Number(select.dataset.selectTool)};
@@ -664,9 +696,10 @@ document.addEventListener("input", event => {
 
 document.addEventListener("dragstart", event => {
   const row = event.target.closest("[data-layout-key]");
-  if (!row || event.target.closest("input, select, button, details, summary")) return event.preventDefault();
+  if (!row || !app.reorderPage || !row.classList.contains("reorder-enabled") || event.target.closest("input, select, button, details, summary")) return event.preventDefault();
   app.draggedLayoutKey = row.dataset.layoutKey;
   row.classList.add("dragging");
+  row.setAttribute("aria-grabbed", "true");
   event.dataTransfer.effectAllowed = "move";
   event.dataTransfer.setData("text/plain", app.draggedLayoutKey);
 });
@@ -683,18 +716,23 @@ document.addEventListener("dragover", event => {
 });
 
 document.addEventListener("drop", event => {
+  if (!app.reorderPage) return;
   const dragged = $(".setting-row.dragging");
   if (!dragged) return;
   event.preventDefault();
   const grid = dragged.parentElement;
   dragged.classList.remove("dragging");
+  dragged.setAttribute("aria-grabbed", "false");
   $$(".drag-target").forEach(item => item.classList.remove("drag-target"));
   app.draggedLayoutKey = "";
   persistRenderedOrder(grid);
 });
 
 document.addEventListener("dragend", () => {
-  $$(".dragging, .drag-target").forEach(item => item.classList.remove("dragging", "drag-target"));
+  $$(".dragging, .drag-target").forEach(item => {
+    item.classList.remove("dragging", "drag-target");
+    if (item.hasAttribute("aria-grabbed")) item.setAttribute("aria-grabbed", "false");
+  });
   app.draggedLayoutKey = "";
 });
 

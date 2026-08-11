@@ -250,8 +250,10 @@ as internal runtime variables. They are not included in the automatic layout,
 but they remain searchable and can still be added manually. The panel does not
 forbid advanced access to them.
 
-After saving, drag visible cards with the mouse inside their section to change
-their order.
+Visible cards are locked during normal use. To change their order, press
+**Reorder variables** beside **Customize variables**, then drag cards inside one
+section. Press **Finish reordering** when done. Moving a card does not reorder
+other sections.
 
 The same tool-variable layout is used for every tool. If a selected variable is
 missing for one tool, its field is disabled and marked **Variable not found**.

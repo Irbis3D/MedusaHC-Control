@@ -221,6 +221,8 @@ button:hover:not(:disabled) { background: #424242; }
 .section-intro > p { max-width: 560px; margin: 0; color: var(--muted); font-size: 12px; line-height: 1.55; }
 .settings-intro-actions { max-width: 620px; display: grid; justify-items: end; gap: 8px; }
 .settings-intro-actions p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.55; text-align: right; }
+.settings-intro-buttons { display: flex; justify-content: flex-end; gap: 8px; }
+.reorder-toggle.active { border: 1px solid rgba(255,152,0,.55); background: rgba(255,152,0,.13); color: #ffb74d; }
 .calibration-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(230px,1fr)); gap: 12px; }
 .calibration-card { position: relative; min-height: 210px; display: flex; flex-direction: column; padding: 18px; border-top: 3px solid rgba(33,150,243,.55); border-radius: 4px; background: var(--surface); box-shadow: var(--shadow); }
 .cal-command { margin-bottom: 24px; color: #90caf9; font-family: Consolas, "Courier New", monospace; font-size: 9px; letter-spacing: .03em; }
@@ -337,7 +339,8 @@ dialog form { padding: 22px; }
 .layout-variable-item textarea { min-height: 48px; resize: vertical; border: 1px solid var(--border); border-radius: 3px; padding: 7px 8px; background: #171717; color: var(--text); font: inherit; font-size: 10px; }
 .layout-dialog-actions { flex-wrap: wrap; }
 .layout-dialog-actions #reset-settings-layout { margin-right: auto; color: #ffb74d; }
-.setting-row[draggable="true"] { cursor: grab; }
+.setting-row.reorder-enabled[draggable="true"] { position: relative; padding-top: 29px; cursor: grab; outline: 1px dashed rgba(255,152,0,.42); }
+.setting-row.reorder-enabled[draggable="true"]::before { content: "DRAG TO REORDER"; position: absolute; top: 8px; left: 11px; color: #ffb74d; font-size: 8px; font-weight: 500; letter-spacing: .08em; }
 .setting-row.dragging { opacity: .35; }
 .setting-row.drag-target { outline: 1px solid var(--blue); }
 .dialog-mark { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 50%; background: var(--orange); color: #111; font-weight: 700; }
@@ -427,6 +430,7 @@ dialog form { padding: 22px; }
   .setting-category-heading p, .settings-group-heading p { max-width: none; text-align: left; }
   .setup-warning { align-items: flex-start; flex-direction: column; gap: 4px; }
   .settings-intro-actions { align-items: flex-start; margin-top: 10px; }
+  .settings-intro-buttons { width: 100%; justify-content: flex-start; flex-wrap: wrap; }
   .settings-layout-dialog { width: calc(100vw - 16px); max-height: calc(100vh - 16px); }
   .settings-layout-dialog form { padding: 14px; }
   .layout-variable-list { max-height: 56vh; }

@@ -212,7 +212,7 @@
       </section>
 
       <section class="view" id="view-tuning">
-        <div class="section-intro tuning-intro"><div><p class="eyebrow">LIVE PRINT ADJUSTMENTS</p><h2>Print tuning</h2></div><div class="settings-intro-actions"><p>Choose a tool, then adjust its individual priming, cleaning and offset values.</p><button class="quiet" type="button" data-customize-settings="tuning">Customize variables</button></div></div>
+        <div class="section-intro tuning-intro"><div><p class="eyebrow">LIVE PRINT ADJUSTMENTS</p><h2>Print tuning</h2></div><div class="settings-intro-actions"><p>Choose a tool, then adjust its individual priming, cleaning and offset values.</p><div class="settings-intro-buttons"><button class="quiet" type="button" data-customize-settings="tuning">Customize variables</button><button class="quiet reorder-toggle" type="button" data-reorder-settings="tuning" aria-pressed="false">Reorder variables</button></div></div></div>
         <div class="settings-groups" id="tuning-groups"></div>
       </section>
 
@@ -226,7 +226,7 @@
       </section>
 
       <section class="view" id="view-printer-settings">
-        <div class="section-intro setup-intro"><div><p class="eyebrow">MACHINE CONFIGURATION</p><h2>Printer settings</h2></div><div class="settings-intro-actions"><p>Dock layout, feeder geometry, calibration, and shared cleaning, priming and motion values. These parameters are locked while printing and should normally be changed only during printer setup.</p><button class="quiet" type="button" data-customize-settings="setup">Customize variables</button></div></div>
+        <div class="section-intro setup-intro"><div><p class="eyebrow">MACHINE CONFIGURATION</p><h2>Printer settings</h2></div><div class="settings-intro-actions"><p>Dock layout, feeder geometry, calibration, and shared cleaning, priming and motion values. These parameters are locked while printing and should normally be changed only during printer setup.</p><div class="settings-intro-buttons"><button class="quiet" type="button" data-customize-settings="setup">Customize variables</button><button class="quiet reorder-toggle" type="button" data-reorder-settings="setup" aria-pressed="false">Reorder variables</button></div></div></div>
         <div class="settings-groups" id="printer-settings-groups"></div>
       </section>
     </main>
@@ -244,7 +244,7 @@
   <dialog id="settings-layout-dialog" class="settings-layout-dialog">
     <form method="dialog">
       <div class="layout-dialog-heading"><div><span class="kicker">LOCAL PANEL LAYOUT</span><h2 id="layout-dialog-title">Customize variables</h2></div><button value="cancel" aria-label="Close">×</button></div>
-      <p class="layout-dialog-copy">Choose which discovered variables are visible. Descriptions and order are stored only by MedusaHC Control and do not modify the printer configuration. After saving, drag visible cards within a section to reorder them.</p>
+      <p class="layout-dialog-copy">Choose which discovered variables are visible. Descriptions and order are stored only by MedusaHC Control and do not modify the printer configuration. Use the separate Reorder variables button when you want to move visible cards.</p>
       <input id="layout-search" type="search" placeholder="Search variable or macro">
       <div class="layout-variable-list" id="layout-variable-list"></div>
       <div class="dialog-actions layout-dialog-actions"><button type="button" id="reset-settings-layout">Reset automatic layout</button><button value="cancel">Cancel</button><button type="button" class="primary" id="save-settings-layout">Save layout</button></div>
