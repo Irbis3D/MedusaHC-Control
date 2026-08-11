@@ -15,6 +15,7 @@ const app = {
   layoutDraft: [],
   draggedLayoutKey: "",
   reorderPage: "",
+  reorderDraft: [],
 };
 
 const $ = (selector, root = document) => root.querySelector(selector);
@@ -42,6 +43,7 @@ function setView(name) {
   const settingsPage = name === "tuning" ? "tuning" : name === "printer-settings" ? "setup" : "";
   if (app.reorderPage && app.reorderPage !== settingsPage) {
     app.reorderPage = "";
+    app.reorderDraft = [];
     updateReorderControls();
   }
   $$(".nav-item").forEach(item => item.classList.toggle("active", item.dataset.view === name));
@@ -363,10 +365,16 @@ async function loadSettings() {
 
 function renderSettings(payload) {
   const reorderEnabled = app.reorderPage === app.settingsPage;
+  const reorderOrder = new Map(
+    (reorderEnabled ? app.reorderDraft : []).map(item => [item.layout_key, Number(item.order || 0)])
+  );
   const generalGroups = {};
   const pageDefinitions = payload.schema
     .filter(item => item.page === app.settingsPage && item.visible !== false)
-    .sort((left, right) => Number(left.layout_order || 0) - Number(right.layout_order || 0));
+    .sort((left, right) => (
+      (reorderOrder.get(left.layout_key) ?? Number(left.layout_order || 0))
+      - (reorderOrder.get(right.layout_key) ?? Number(right.layout_order || 0))
+    ));
   const toolDefinitions = pageDefinitions.filter(item => Number.isInteger(item.tool));
   pageDefinitions.filter(item => !Number.isInteger(item.tool)).forEach(definition => (generalGroups[definition.group] ||= []).push(definition));
   const tools = [...new Set(toolDefinitions.map(item => item.tool))];
@@ -526,23 +534,62 @@ function updateReorderControls() {
     const active = app.reorderPage === button.dataset.reorderSettings;
     button.classList.toggle("active", active);
     button.setAttribute("aria-pressed", String(active));
-    button.textContent = active ? "Finish reordering" : "Reorder variables";
+    button.textContent = active ? "Save order" : "Reorder variables";
+  });
+  $$('[data-cancel-reorder]').forEach(button => {
+    button.hidden = app.reorderPage !== button.dataset.cancelReorder;
+  });
+  $$('[data-customize-settings]').forEach(button => {
+    button.disabled = app.reorderPage === button.dataset.customizeSettings;
   });
 }
 
-function toggleReorderMode(page) {
-  app.reorderPage = app.reorderPage === page ? "" : page;
+function clearReorderState() {
+  app.reorderPage = "";
+  app.reorderDraft = [];
   app.draggedLayoutKey = "";
   $$(".dragging, .drag-target").forEach(item => item.classList.remove("dragging", "drag-target"));
   updateReorderControls();
-  if (app.settings && app.settingsPage === page) renderSettings(app.settings);
-  toast(app.reorderPage ? "Reorder mode enabled. Drag variables within one section." : "Variable order locked");
 }
 
-async function persistRenderedOrder(grid) {
+function startReorderMode(page) {
+  app.reorderPage = page;
+  app.reorderDraft = buildLayoutDraft();
+  app.draggedLayoutKey = "";
+  updateReorderControls();
+  if (app.settings && app.settingsPage === page) renderSettings(app.settings);
+  toast("Reorder mode enabled. Changes are not saved until Save order is pressed.");
+}
+
+async function finishReorderMode(page) {
+  if (app.reorderPage !== page) return startReorderMode(page);
+  const entries = visibleLayoutEntries(app.reorderDraft);
+  try {
+    await api("/api/settings/layout", {
+      method: "POST",
+      body: JSON.stringify({entries}),
+    });
+    clearReorderState();
+    toast("Variable order saved");
+    await loadSettings();
+  } catch (error) { toast(error.message, true); }
+}
+
+function cancelReorderMode(page, notify = true) {
+  if (app.reorderPage !== page) return;
+  clearReorderState();
+  if (app.settings && app.settingsPage === page) renderSettings(app.settings);
+  if (notify) toast("Reordering cancelled. The saved order was not changed.");
+}
+
+function toggleReorderMode(page) {
+  return app.reorderPage === page ? finishReorderMode(page) : startReorderMode(page);
+}
+
+function captureRenderedOrder(grid) {
   const page = grid.closest("#view-tuning") ? "tuning" : "setup";
   const orderedKeys = $$(`[data-layout-key]`, grid).map(item => item.dataset.layoutKey);
-  const draft = buildLayoutDraft();
+  const draft = app.reorderDraft.map(item => ({...item}));
   const visibleOnPage = draft
     .filter(item => item.page === page && item.visible)
     .sort((left, right) => left.order - right.order);
@@ -555,7 +602,7 @@ async function persistRenderedOrder(grid) {
   for (const item of draft) {
     if (item.page === page && item.visible) item.order = rank.get(item.layout_key) ?? completeOrder.length;
   }
-  await saveSettingsLayout(visibleLayoutEntries(draft), false);
+  app.reorderDraft = draft;
 }
 
 async function changeSetting(key, mode, suppliedValue = null) {
@@ -609,6 +656,8 @@ document.addEventListener("click", event => {
   if (customizeSettings) return openSettingsLayout(customizeSettings.dataset.customizeSettings);
   const reorderSettings = event.target.closest("[data-reorder-settings]");
   if (reorderSettings) return toggleReorderMode(reorderSettings.dataset.reorderSettings);
+  const cancelReorder = event.target.closest("[data-cancel-reorder]");
+  if (cancelReorder) return cancelReorderMode(cancelReorder.dataset.cancelReorder);
   const select = event.target.closest("[data-select-tool]");
   if (select) {
     const payload = {tool: Number(select.dataset.selectTool)};
@@ -725,7 +774,7 @@ document.addEventListener("drop", event => {
   dragged.setAttribute("aria-grabbed", "false");
   $$(".drag-target").forEach(item => item.classList.remove("drag-target"));
   app.draggedLayoutKey = "";
-  persistRenderedOrder(grid);
+  captureRenderedOrder(grid);
 });
 
 document.addEventListener("dragend", () => {

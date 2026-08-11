@@ -252,8 +252,9 @@ forbid advanced access to them.
 
 Visible cards are locked during normal use. To change their order, press
 **Reorder variables** beside **Customize variables**, then drag cards inside one
-section. Press **Finish reordering** when done. Moving a card does not reorder
-other sections.
+section. The changes remain only in the browser until **Save order** is pressed.
+Use **Cancel** to restore the previously saved order. Leaving the page also
+discards the unfinished order. Moving a card does not reorder other sections.
 
 The same tool-variable layout is used for every tool. If a selected variable is
 missing for one tool, its field is disabled and marked **Variable not found**.
