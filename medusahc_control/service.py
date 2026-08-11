@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import queue
 import threading
+import time
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
@@ -59,6 +60,7 @@ class ControlService:
         )
         self._state = self._simulator.snapshot() if self._simulator else disconnected_state("Connecting to Moonraker")
         self._state_lock = threading.RLock()
+        self._runtime_setting_overrides: dict[tuple[str, str], tuple[float | int, float]] = {}
         self._control_active = bool(config.simulate or config.allow_commands)
         self._config_store = None
         if not config.simulate and config.medusahc_variables_path:
@@ -116,6 +118,7 @@ class ControlService:
                     assert self._moonraker is not None
                     state = normalize_status(self._moonraker.query_status())
                 with self._state_lock:
+                    self._merge_runtime_setting_overrides(state)
                     self._state = state
                 self.database.observe(state)
             except MoonrakerError as exc:
@@ -378,6 +381,7 @@ class ControlService:
         else:
             assert self._moonraker is not None
             self._send_setting(definition, numeric)
+            self._remember_runtime_setting(definition, numeric)
             self._apply_active_offset(definition, state)
             if mode == "permanent":
                 if not self._config_store or not self._config_store.available:
@@ -394,6 +398,28 @@ class ControlService:
             details={"key": key, "value": numeric, "mode": mode},
         )
         return {"ok": True, "key": key, "value": numeric, "mode": mode}
+
+    def _remember_runtime_setting(self, definition: dict[str, Any], value: float | int) -> None:
+        macro = str(definition["macro"])
+        variable = str(definition["variable"])
+        expires = time.monotonic() + max(3.0, float(self.config.poll_interval) * 3.0)
+        with self._state_lock:
+            self._runtime_setting_overrides[(macro, variable)] = (value, expires)
+            macro_values = self._state.setdefault("macro_values", {})
+            macro_values.setdefault(macro, {})[variable] = value
+
+    def _merge_runtime_setting_overrides(self, state: dict[str, Any]) -> None:
+        now = time.monotonic()
+        macro_values = state.setdefault("macro_values", {})
+        finished: list[tuple[str, str]] = []
+        for (macro, variable), (value, expires) in self._runtime_setting_overrides.items():
+            current = macro_values.get(macro, {}).get(variable)
+            if current == value or now >= expires:
+                finished.append((macro, variable))
+                continue
+            macro_values.setdefault(macro, {})[variable] = value
+        for key in finished:
+            self._runtime_setting_overrides.pop(key, None)
 
     def _send_setting(self, definition: dict[str, Any], numeric: float | int) -> None:
         assert self._moonraker is not None

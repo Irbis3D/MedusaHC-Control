@@ -195,8 +195,10 @@ configuration.
 running macro. For tool offsets, it uses the value currently stored by
 Klipper's `[save_variables]` system. This reverses an accidental **Apply**
 without writing either configuration file. The stored value is displayed below
-the controls as **Config**. Reset is unavailable when no numeric stored value
-can be read.
+the controls as **Saved config**. If the running and saved values differ, the
+panel displays **Temporary value active**. This is expected after **Apply** and
+is not a synchronization error. Reset is unavailable when no numeric stored
+value can be read.
 
 ### Save to config
 

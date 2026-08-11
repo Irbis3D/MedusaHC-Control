@@ -89,6 +89,27 @@ class VariableInspectionTests(unittest.TestCase):
 
 
 class LayoutDatabaseTests(unittest.TestCase):
+    def test_stale_poll_cannot_overwrite_just_applied_runtime_value(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            service = ControlService(AppConfig(
+                simulate=True,
+                database_path=str(Path(directory) / "stats.db"),
+            ))
+            try:
+                definition = {"macro": "TOOL_STATE_0", "variable": "clean_move"}
+                service._remember_runtime_setting(definition, 0)
+                stale = {"macro_values": {"TOOL_STATE_0": {"clean_move": 1}}}
+                with service._state_lock:
+                    service._merge_runtime_setting_overrides(stale)
+                self.assertEqual(stale["macro_values"]["TOOL_STATE_0"]["clean_move"], 0)
+
+                observed = {"macro_values": {"TOOL_STATE_0": {"clean_move": 0}}}
+                with service._state_lock:
+                    service._merge_runtime_setting_overrides(observed)
+                self.assertFalse(service._runtime_setting_overrides)
+            finally:
+                service.stop()
+
     def test_runtime_reset_source_remains_saved_configuration(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             service = ControlService(AppConfig(

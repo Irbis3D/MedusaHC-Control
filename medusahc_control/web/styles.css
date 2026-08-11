@@ -258,6 +258,7 @@ button:hover:not(:disabled) { background: #424242; }
 .setting-control button.reset { border: 1px solid rgba(144,202,249,.35); background: transparent; color: #90caf9; }
 .configured-value { margin: 6px 0 0; color: var(--muted); font-size: 8px; text-align: right; }
 .configured-value strong { color: #90caf9; font-family: Consolas,"Courier New",monospace; font-weight: 500; }
+.configured-value.changed { color: #80cbc4; }
 .setting-history { margin-top: 7px; border-top: 1px solid var(--border-soft); }
 .setting-history summary { display: flex; justify-content: space-between; padding-top: 7px; color: var(--muted); font-size: 9px; cursor: pointer; user-select: none; }
 .setting-history summary span { color: rgba(255,255,255,.38); }

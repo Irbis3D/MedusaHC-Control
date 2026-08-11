@@ -384,7 +384,12 @@ function renderSettings(payload) {
     const historyPanel = `<details class="setting-history"><summary>Recent values <span>${history.length}/10</span></summary><div>${history.length ? history.map(item => `<button type="button" data-history-key="${escapeHtml(definition.key)}" data-history-value="${escapeHtml(item.value)}"><strong>${escapeHtml(item.value)}</strong><span>${item.mode === "permanent" ? "Config" : "Applied"} · ${new Date(item.created_at * 1000).toLocaleString()}</span></button>`).join("") : `<p>No values entered through the panel yet.</p>`}</div></details>`;
     const description = definition.description ? `<p class="setting-description">${escapeHtml(definition.description).replaceAll("\n", "<br>")}</p>` : "";
     const unavailable = available ? "" : `<p class="setting-unavailable"><strong>Variable not found.</strong><span>${escapeHtml(definition.availability_reason || definition.variable)}</span></p>`;
-    const configured = hasConfiguredValue ? `<p class="configured-value">Config: <strong>${escapeHtml(definition.configured_value)}</strong></p>` : "";
+    const configuredChoice = definition.type === "choice"
+      ? definition.choices.find(choice => Number(choice.value) === Number(definition.configured_value))
+      : null;
+    const configuredLabel = configuredChoice?.label ?? definition.configured_value;
+    const temporaryValueActive = hasConfiguredValue && value !== "" && Number(value) !== Number(definition.configured_value);
+    const configured = hasConfiguredValue ? `<p class="configured-value ${temporaryValueActive ? "changed" : ""}">${temporaryValueActive ? "Temporary value active · " : ""}Saved config: <strong>${escapeHtml(configuredLabel)}</strong></p>` : "";
     return `<div class="setting-row ${available ? "" : "setting-row-unavailable"}" draggable="true" data-layout-key="${escapeHtml(definition.layout_key)}"><label>${escapeHtml(definition.label)}<span>${escapeHtml(definition.unit || "")}</span></label>${description}<div class="setting-control">${input}<button data-setting-mode="runtime" data-setting-key="${escapeHtml(definition.key)}" ${runtimeDisabled}>Apply</button><button class="reset" data-setting-reset="${escapeHtml(definition.key)}" title="Apply the value currently stored in the printer configuration" ${resetDisabled}>Reset</button><button class="permanent" data-setting-mode="permanent" data-setting-key="${escapeHtml(definition.key)}" ${fileDisabled}>Save to config</button></div>${configured}${unavailable}${historyPanel}</div>`;
   };
   const groupDescriptions = {
@@ -532,7 +537,15 @@ async function changeSetting(key, mode, suppliedValue = null) {
     const result = await api("/api/settings", {method: "POST", body: JSON.stringify({key, value, mode})});
     const label = {runtime: "applied", permanent: "saved to config"}[result.mode] || "updated";
     toast(`${key} ${label}: ${result.value}`);
-    setTimeout(() => { loadState(); loadSettings(); }, 180);
+    app.settings.values ||= {};
+    app.settings.history ||= {};
+    app.settings.values[key] = result.value;
+    if (result.mode === "permanent") definition.configured_value = result.value;
+    const history = app.settings.history[key] ||= [];
+    history.unshift({value: result.value, mode: result.mode, created_at: Date.now() / 1000});
+    app.settings.history[key] = history.slice(0, 10);
+    renderSettings(app.settings);
+    setTimeout(loadState, 180);
   } catch (error) { toast(error.message, true); }
 }
 
