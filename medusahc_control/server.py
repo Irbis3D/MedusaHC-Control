@@ -80,6 +80,12 @@ class RequestHandler(BaseHTTPRequestHandler):
                     )
                 )
                 return
+            if path == "/api/settings/layout":
+                self._json(self.server.service.save_settings_layout(payload.get("entries")))
+                return
+            if path == "/api/settings/layout/reset":
+                self._json(self.server.service.reset_settings_layout())
+                return
             if path == "/api/stats/reset":
                 self._json(self.server.service.database.reset_toolchange_stats())
                 return

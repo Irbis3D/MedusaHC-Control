@@ -151,20 +151,114 @@ class ControlService:
 
     def settings_payload(self) -> dict[str, Any]:
         state = self.state()
-        values = dict(state.get("settings", {}))
-        for tool in state.get("tools", []):
-            tool_number = int(tool.get("number", -1))
-            for name, value in tool.get("process", {}).items():
-                values[f"t{tool_number}_{name}"] = value
-            for axis, value in tool.get("offsets", {}).items():
-                values[f"t{tool_number}_offset_{axis}"] = value
-        schema = schema_for(int(state.get("tool_count", 1) or 1))
+        schema, discovery_warning = self._settings_schema(state)
+        macro_values = state.get("macro_values", {})
+        values: dict[str, float | int] = {}
+        for definition in schema:
+            if not definition.get("available", True):
+                continue
+            macro = str(definition["macro"])
+            variable = str(definition["variable"])
+            current = macro_values.get(macro, {})
+            if variable in current:
+                values[str(definition["key"])] = current[variable]
+        layout = self.database.settings_layout()
+        self._apply_settings_layout(schema, layout)
         return {
             "schema": schema,
             "values": values,
             "history": self.database.setting_history([item["key"] for item in schema]),
             "file_write_available": self._simulator is not None or bool(self._config_store and self._config_store.available),
+            "discovery_warning": discovery_warning,
+            "layout": layout,
         }
+
+    @staticmethod
+    def _apply_settings_layout(schema: list[dict[str, Any]], layout: dict[str, Any]) -> None:
+        if not layout.get("customized"):
+            for position, definition in enumerate(schema):
+                definition["visible"] = bool(definition.get("default_visible", True))
+                definition["layout_order"] = position
+            return
+        entries = {
+            str(item["layout_key"]): item
+            for item in layout.get("entries", [])
+            if isinstance(item, dict) and item.get("layout_key")
+        }
+        for definition in schema:
+            entry = entries.get(str(definition["layout_key"]))
+            definition["visible"] = entry is not None
+            definition["layout_order"] = int(entry.get("position", 0)) if entry else 1_000_000
+            if entry is not None:
+                definition["description"] = str(entry.get("description", ""))
+
+    def save_settings_layout(self, entries: Any) -> dict[str, Any]:
+        if not isinstance(entries, list):
+            raise ValueError("Layout entries must be a list")
+        if len(entries) > 512:
+            raise ValueError("Layout contains too many variables")
+        schema, _warning = self._settings_schema(self.state())
+        allowed = {str(item["layout_key"]) for item in schema}
+        normalized: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        for position, item in enumerate(entries):
+            if not isinstance(item, dict):
+                raise ValueError("Each layout entry must be an object")
+            layout_key = str(item.get("layout_key", ""))
+            if layout_key not in allowed:
+                raise ValueError(f"Unknown settings variable: {layout_key}")
+            if layout_key in seen:
+                raise ValueError(f"Duplicate settings variable: {layout_key}")
+            description = str(item.get("description", "")).strip()
+            if len(description) > 1000:
+                raise ValueError("Variable descriptions cannot exceed 1000 characters")
+            seen.add(layout_key)
+            normalized.append({
+                "layout_key": layout_key,
+                "position": position,
+                "description": description,
+            })
+        layout = self.database.save_settings_layout(normalized)
+        self.database.record("settings_layout_changed", details={"visible_variables": len(normalized)})
+        return {"ok": True, "layout": layout}
+
+    def reset_settings_layout(self) -> dict[str, Any]:
+        layout = self.database.reset_settings_layout()
+        self.database.record("settings_layout_reset")
+        return {"ok": True, "layout": layout}
+
+    def _settings_schema(self, state: dict[str, Any]) -> tuple[list[dict[str, Any]], str]:
+        discovery_warning = ""
+        if self._simulator is not None:
+            discovered = None
+        elif self._config_store is None:
+            discovered = {}
+            discovery_warning = "MedusaHC variables file is not configured for the dashboard."
+        else:
+            try:
+                discovered = self._config_store.inspect_variables()
+            except (OSError, UnicodeError, ValueError) as exc:
+                discovered = {}
+                discovery_warning = str(exc)
+
+        schema = schema_for(
+            int(state.get("tool_count", 1) or 1),
+            discovered,
+            discovery_warning,
+        )
+        macro_values = state.get("macro_values", {})
+        for definition in schema:
+            if not definition.get("available", True):
+                continue
+            macro = str(definition["macro"])
+            variable = str(definition["variable"])
+            if variable not in macro_values.get(macro, {}):
+                definition["available"] = False
+                definition["availability_reason"] = (
+                    f"variable_{variable} is not available in the running "
+                    f"[gcode_macro {macro}] configuration"
+                )
+        return schema, discovery_warning
 
     def camera_payload(self) -> dict[str, Any]:
         if self._simulator is not None:
@@ -266,8 +360,8 @@ class ControlService:
             raise SafetyError("Klipper must be ready before changing settings")
         if mode != "runtime" and state.get("print_state") in {"printing", "paused"}:
             raise SafetyError("Configuration files cannot be changed while a print is active or paused")
-        tool_count = int(state.get("tool_count", 1))
-        definition, numeric = validate_setting(key, value, tool_count)
+        schema, _discovery_warning = self._settings_schema(state)
+        definition, numeric = validate_setting(key, value, schema)
         print_active = state.get("print_state") in {"printing", "paused"}
         if definition.get("page") == "setup" and print_active:
             raise SafetyError("Printer setup parameters can only be changed while the printer is idle")

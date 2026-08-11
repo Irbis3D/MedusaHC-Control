@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import math
+import re
 from typing import Any
 
 
@@ -23,55 +25,159 @@ BASE_SETTINGS: tuple[dict[str, Any], ...] = (
 
 
 TOOL_SETTINGS: tuple[dict[str, Any], ...] = (
-    {"variable": "prime_amount", "label": "Prime amount", "category": "Priming", "unit": "mm", "min": 0, "max": 100, "step": 0.1},
-    {"variable": "prime_speed", "label": "Prime speed", "category": "Priming", "unit": "mm/s", "min": 0.1, "max": 100, "step": 0.1},
-    {"variable": "prime_retract", "label": "Prime retract", "category": "Priming", "unit": "mm", "min": 0, "max": 20, "step": 0.1},
-    {"variable": "prime_retract_speed", "label": "Prime retract speed", "category": "Priming", "unit": "mm/s", "min": 0.1, "max": 100, "step": 0.1},
-    {"variable": "first_prime_flag", "label": "First prime enabled", "category": "First Prime", "type": "choice", "choices": [{"value": 1, "label": "Enabled"}, {"value": 0, "label": "Disabled"}]},
-    {"variable": "first_prime_amount", "label": "First prime amount", "category": "First Prime", "unit": "mm", "min": 0, "max": 100, "step": 0.1},
-    {"variable": "first_prime_speed", "label": "First prime speed", "category": "First Prime", "unit": "mm/s", "min": 0.1, "max": 100, "step": 0.1},
-    {"variable": "clean_move", "label": "Cleaning enabled", "category": "Cleaning", "type": "choice", "choices": [{"value": 1, "label": "Enabled"}, {"value": 0, "label": "Disabled"}]},
-    {"variable": "x_clean_move", "label": "Cleaning X movement", "category": "Cleaning", "unit": "mm", "min": 0, "max": 50, "step": 0.1},
-    {"variable": "y_clean_move", "label": "Cleaning Y movement", "category": "Cleaning", "unit": "mm", "min": 0, "max": 50, "step": 0.1},
-    {"variable": "clean_move_speed", "label": "Cleaning movement speed", "category": "Cleaning", "unit": "mm/s", "min": 1, "max": 1000, "step": 1},
-    {"variable": "ptfe_clean_slow_speed", "label": "PTFE slow cleaning speed", "category": "Cleaning", "unit": "mm/s", "min": 0.1, "max": 100, "step": 0.1},
-    {"variable": "clean_retract", "label": "Cleaning retract", "category": "Cleaning", "unit": "mm", "min": 0, "max": 20, "step": 0.1},
-    {"variable": "clean_retract_speed", "label": "Cleaning retract speed", "category": "Cleaning", "unit": "mm/s", "min": 0.1, "max": 100, "step": 0.1},
+    {"variable": "prime_amount", "category": "Priming", "unit": "mm", "min": 0, "max": 100, "step": 0.1},
+    {"variable": "prime_speed", "category": "Priming", "unit": "mm/s", "min": 0.1, "max": 100, "step": 0.1},
+    {"variable": "prime_retract", "category": "Priming", "unit": "mm", "min": 0, "max": 20, "step": 0.1},
+    {"variable": "prime_retract_speed", "category": "Priming", "unit": "mm/s", "min": 0.1, "max": 100, "step": 0.1},
+    {"variable": "first_prime_flag", "category": "First Prime", "type": "choice", "choices": [{"value": 1, "label": "Enabled"}, {"value": 0, "label": "Disabled"}]},
+    {"variable": "first_prime_amount", "category": "First Prime", "unit": "mm", "min": 0, "max": 100, "step": 0.1},
+    {"variable": "first_prime_speed", "category": "First Prime", "unit": "mm/s", "min": 0.1, "max": 100, "step": 0.1},
+    {"variable": "clean_move", "category": "Cleaning", "type": "choice", "choices": [{"value": 1, "label": "Enabled"}, {"value": 0, "label": "Disabled"}]},
+    {"variable": "x_clean_move", "category": "Cleaning", "unit": "mm", "min": 0, "max": 50, "step": 0.1},
+    {"variable": "y_clean_move", "category": "Cleaning", "unit": "mm", "min": 0, "max": 50, "step": 0.1},
+    {"variable": "clean_move_speed", "category": "Cleaning", "unit": "mm/s", "min": 1, "max": 1000, "step": 1},
+    {"variable": "ptfe_clean_slow_speed", "category": "Cleaning", "unit": "mm/s", "min": 0.1, "max": 100, "step": 0.1},
+    {"variable": "clean_retract", "category": "Cleaning", "unit": "mm", "min": 0, "max": 20, "step": 0.1},
+    {"variable": "clean_retract_speed", "category": "Cleaning", "unit": "mm/s", "min": 0.1, "max": 100, "step": 0.1},
 )
 
+LEGACY_TOOL_EQUIVALENTS: dict[str, set[str]] = {
+    "x_clean_move": {"clean_move_x"},
+    "y_clean_move": {"clean_move_y"},
+}
 
-def schema_for(tool_count: int) -> list[dict[str, Any]]:
+
+_SECTION_RE = re.compile(r"^\s*\[gcode_macro\s+([^\]]+)]\s*(?:#.*)?$", re.IGNORECASE)
+_VARIABLE_RE = re.compile(r"^\s*variable_([A-Za-z_][A-Za-z0-9_]*)\s*:\s*([^#\r\n]*?)(?:\s+#.*)?$")
+_COMMENT_RE = re.compile(r"^\s*#\s?(.*)$")
+
+
+def inspect_variable_config(text: str) -> dict[tuple[str, str], dict[str, Any]]:
+    """Return active gcode macro variables and directly preceding comments."""
+    discovered: dict[tuple[str, str], dict[str, Any]] = {}
+    macro = ""
+    pending_comments: list[str] = []
+    for line_number, line in enumerate(text.splitlines(), start=1):
+        section_match = _SECTION_RE.match(line)
+        if section_match:
+            macro = section_match.group(1).strip()
+            pending_comments = []
+            continue
+        if not macro:
+            continue
+        comment_match = _COMMENT_RE.match(line)
+        if comment_match:
+            pending_comments.append(comment_match.group(1).strip())
+            continue
+        if not line.strip():
+            pending_comments = []
+            continue
+        variable_match = _VARIABLE_RE.match(line)
+        if not variable_match:
+            pending_comments = []
+            continue
+        variable, raw_value = variable_match.groups()
+        numeric_value = _numeric_literal(raw_value.strip())
+        discovered[(macro, variable)] = {
+            "macro": macro,
+            "variable": variable,
+            "raw_value": raw_value.strip(),
+            "numeric_value": numeric_value,
+            "description": "\n".join(item for item in pending_comments if item).strip(),
+            "line": line_number,
+        }
+        pending_comments = []
+    return discovered
+
+
+def schema_for(
+    tool_count: int,
+    discovered: dict[tuple[str, str], dict[str, Any]] | None = None,
+    discovery_error: str = "",
+) -> list[dict[str, Any]]:
+    """Build a stable machine schema plus discovered tool process variables."""
     setup_groups = {"Layout", "Feeder", "Calibration", "Cleaning and priming", "Motion"}
     schema = [
-        {**dict(item), "page": "setup" if item["group"] in setup_groups else "tuning"}
+        _with_availability(
+            {
+                **dict(item),
+                "label": str(item["variable"]),
+                "page": "setup" if item["group"] in setup_groups else "tuning",
+            },
+            discovered,
+            discovery_error,
+        )
         for item in BASE_SETTINGS
     ]
     for tool in range(tool_count):
         schema.append(
-            {
-                "key": f"x_t{tool}", "macro": "TOOL_CFG", "variable": f"x_t{tool}",
-                "label": f"T{tool} dock X", "group": "Dock coordinates", "unit": "mm",
-                "min": -100, "max": 600, "step": 0.1, "page": "setup",
-            }
+            _with_availability(
+                {
+                    "key": f"x_t{tool}", "macro": "TOOL_CFG", "variable": f"x_t{tool}",
+                    "label": f"x_t{tool}", "group": "Dock coordinates", "unit": "mm",
+                    "min": -100, "max": 600, "step": 0.1, "page": "setup",
+                },
+                discovered,
+                discovery_error,
+            )
         )
-        for template in TOOL_SETTINGS:
-            definition = dict(template)
-            variable = str(definition["variable"])
-            definition.update({
-                "key": f"t{tool}_{variable}",
-                "macro": f"TOOL_STATE_{tool}",
-                "group": "Tool priming and cleaning",
-                "tool": tool,
+
+    if discovered is None:
+        for tool in range(tool_count):
+            for template in TOOL_SETTINGS:
+                schema.append(_tool_definition(tool, dict(template), available=True))
+    else:
+        known = {str(item["variable"]): dict(item) for item in TOOL_SETTINGS}
+        for tool in range(tool_count):
+            macro = f"TOOL_STATE_{tool}"
+            found_names: set[str] = set()
+            for (found_macro, variable), metadata in discovered.items():
+                category = _tuning_category(variable)
+                if found_macro != macro:
+                    continue
+                if metadata.get("numeric_value") is None:
+                    continue
+                template = dict(known.get(variable, {"variable": variable, "category": category or "Other", "step": 0.1}))
+                template["description"] = str(metadata.get("description", ""))
+                definition = _tool_definition(tool, template, available=True)
+                definition["default_visible"] = category is not None
+                schema.append(definition)
+                found_names.add(variable)
+            for template in TOOL_SETTINGS:
+                variable = str(template["variable"])
+                if variable in found_names or LEGACY_TOOL_EQUIVALENTS.get(variable, set()) & found_names:
+                    continue
+                definition = _tool_definition(tool, dict(template), available=False)
+                definition["availability_reason"] = _missing_reason(macro, variable, discovery_error)
+                schema.append(definition)
+
+        for (macro, variable), metadata in discovered.items():
+            category = _tuning_category(variable)
+            if macro != "GLOBAL_STATE" or category is None or metadata.get("numeric_value") is None:
+                continue
+            template = dict(known.get(variable, {"variable": variable, "category": category, "step": 0.1}))
+            template.update({
+                "key": f"global_{variable}",
+                "macro": macro,
+                "label": variable,
+                "group": f"Shared {category}",
                 "page": "tuning",
+                "description": str(metadata.get("description", "")),
+                "available": True,
+                "legacy_shared": True,
+                "layout_key": f"macro:{macro}:{variable}",
+                "default_visible": True,
             })
-            schema.append(definition)
+            schema.append(template)
+
+    for tool in range(tool_count):
         for axis in ("x", "y", "z"):
             schema.append({
                 "key": f"t{tool}_offset_{axis}",
                 "macro": "TOOL_OFFSET",
                 "variable": f"t{tool}_off_{axis}",
                 "saved_variable": f"t{tool}_gcode_{axis}_offset",
-                "label": f"{axis.upper()} offset",
+                "label": f"t{tool}_off_{axis}",
                 "group": "Tool priming and cleaning",
                 "category": "Offsets",
                 "unit": "mm",
@@ -81,23 +187,126 @@ def schema_for(tool_count: int) -> list[dict[str, Any]]:
                 "tool": tool,
                 "page": "tuning",
                 "kind": "tool_offset",
+                "layout_key": f"tool_offset:{axis}",
+                "default_visible": True,
+                "available": True,
+            })
+    if discovered is not None:
+        represented = {(str(item["macro"]), str(item["variable"])) for item in schema}
+        for (macro, variable), metadata in discovered.items():
+            if (macro, variable) in represented or metadata.get("numeric_value") is None:
+                continue
+            if re.fullmatch(r"TOOL_STATE_\d+", macro):
+                continue
+            schema.append({
+                "key": f"advanced_{_key_fragment(macro)}_{variable}",
+                "macro": macro,
+                "variable": variable,
+                "label": variable,
+                "group": "Advanced variables",
+                "page": "setup",
+                "step": 0.1,
+                "description": str(metadata.get("description", "")),
+                "available": True,
+                "layout_key": f"macro:{macro}:{variable}",
+                "default_visible": False,
+                "advanced": True,
             })
     return schema
 
 
-def validate_setting(key: str, value: Any, tool_count: int) -> tuple[dict[str, Any], float | int]:
-    definition = next((item for item in schema_for(tool_count) if item["key"] == key), None)
+def validate_setting(
+    key: str,
+    value: Any,
+    schema: list[dict[str, Any]],
+) -> tuple[dict[str, Any], float | int]:
+    definition = next((item for item in schema if item["key"] == key), None)
     if definition is None:
         raise ValueError(f"Unsupported setting: {key}")
+    if not definition.get("available", True):
+        raise ValueError(str(definition.get("availability_reason") or f"{key} is not available"))
     try:
         numeric = float(value)
     except (TypeError, ValueError) as exc:
         raise ValueError(f"{definition['label']} must be numeric") from exc
-    if numeric < float(definition.get("min", numeric)) or numeric > float(definition.get("max", numeric)):
-        raise ValueError(f"{definition['label']} must be between {definition.get('min')} and {definition.get('max')}")
+    if not math.isfinite(numeric):
+        raise ValueError(f"{definition['label']} must be a finite number")
+    if "min" in definition and numeric < float(definition["min"]):
+        raise ValueError(f"{definition['label']} must be at least {definition['min']}")
+    if "max" in definition and numeric > float(definition["max"]):
+        raise ValueError(f"{definition['label']} must be no more than {definition['max']}")
     if definition.get("type") == "choice":
         choices = [item["value"] for item in definition["choices"]]
         if numeric not in choices:
             raise ValueError(f"Unsupported value for {definition['label']}")
         numeric = int(numeric)
     return definition, numeric
+
+
+def _tool_definition(tool: int, template: dict[str, Any], *, available: bool) -> dict[str, Any]:
+    variable = str(template["variable"])
+    definition = dict(template)
+    definition.update({
+        "key": f"t{tool}_{variable}",
+        "macro": f"TOOL_STATE_{tool}",
+        "label": variable,
+        "group": "Tool priming and cleaning",
+        "tool": tool,
+        "page": "tuning",
+        "available": available,
+        "layout_key": f"tool:{variable}",
+        "default_visible": True,
+    })
+    definition.setdefault("description", "")
+    return definition
+
+
+def _with_availability(
+    definition: dict[str, Any],
+    discovered: dict[tuple[str, str], dict[str, Any]] | None,
+    discovery_error: str,
+) -> dict[str, Any]:
+    result = dict(definition)
+    result.setdefault("layout_key", f"macro:{result['macro']}:{result['variable']}")
+    result.setdefault("default_visible", True)
+    if discovered is None:
+        result["available"] = True
+        return result
+    macro, variable = str(result["macro"]), str(result["variable"])
+    result["available"] = (macro, variable) in discovered
+    if result["available"] and discovered[(macro, variable)].get("description"):
+        result.setdefault("description", str(discovered[(macro, variable)]["description"]))
+    if not result["available"]:
+        result["availability_reason"] = _missing_reason(macro, variable, discovery_error)
+    return result
+
+
+def _missing_reason(macro: str, variable: str, discovery_error: str = "") -> str:
+    if discovery_error:
+        return discovery_error
+    return f"variable_{variable} was not found in [gcode_macro {macro}]"
+
+
+def _tuning_category(variable: str) -> str | None:
+    lowered = variable.lower()
+    if "first_prime" in lowered:
+        return "First Prime"
+    if "prime" in lowered:
+        return "Priming"
+    if "clean" in lowered:
+        return "Cleaning"
+    return None
+
+
+def _numeric_literal(raw_value: str) -> float | int | None:
+    try:
+        numeric = float(raw_value)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(numeric):
+        return None
+    return int(numeric) if numeric.is_integer() else numeric
+
+
+def _key_fragment(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "_", value.lower()).strip("_")

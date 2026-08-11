@@ -38,6 +38,14 @@ does not yet provide the complete setup wizard planned for future versions.
 - Run MedusaHC cleaning, priming and calibration macros.
 - Run Z Tilt and common bed calibration commands.
 - Change tool offsets and MedusaHC motion, cleaning and priming variables.
+- Discover numeric variables from the installed MedusaHC variables file instead
+  of requiring one fixed configuration version.
+- Start with a ready-to-use layout for the current MedusaHC configuration, then
+  hide, add or reorder variables without changing the printer configuration.
+- Use comments immediately above variable declarations as descriptions, with
+  optional local descriptions in the panel.
+- Keep expected settings visible but disabled when a variable is missing,
+  instead of failing to load the settings page.
 - Apply supported values temporarily during the current Klipper session.
 - Save supported values permanently to the appropriate configuration file
   after a warning and confirmation.

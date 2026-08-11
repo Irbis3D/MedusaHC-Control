@@ -59,6 +59,15 @@ class StatsDatabase:
             self._connection.execute(
                 "CREATE INDEX IF NOT EXISTS idx_setting_history_key_id ON setting_history(setting_key, id DESC)"
             )
+            self._connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS settings_layout (
+                    layout_key TEXT PRIMARY KEY,
+                    position INTEGER NOT NULL,
+                    description TEXT NOT NULL DEFAULT ''
+                )
+                """
+            )
             self._connection.execute("PRAGMA optimize")
 
     def close(self) -> None:
@@ -106,6 +115,45 @@ class StatsDatabase:
                     "created_at": row["created_at"],
                 })
         return history
+
+    def settings_layout(self) -> dict[str, Any]:
+        with self._lock:
+            customized_row = self._connection.execute(
+                "SELECT value FROM stats_meta WHERE key='settings_layout_customized'"
+            ).fetchone()
+            rows = self._connection.execute(
+                "SELECT layout_key, position, description FROM settings_layout ORDER BY position, layout_key"
+            )
+            entries = [dict(row) for row in rows]
+        return {
+            "customized": bool(customized_row and customized_row["value"] == "1"),
+            "entries": entries,
+        }
+
+    def save_settings_layout(self, entries: list[dict[str, Any]]) -> dict[str, Any]:
+        with self._lock, self._connection:
+            self._connection.execute("DELETE FROM settings_layout")
+            self._connection.executemany(
+                "INSERT INTO settings_layout(layout_key, position, description) VALUES (?, ?, ?)",
+                [
+                    (str(item["layout_key"]), int(item["position"]), str(item.get("description", "")))
+                    for item in entries
+                ],
+            )
+            self._connection.execute(
+                "INSERT INTO stats_meta(key, value) VALUES ('settings_layout_customized', '1') "
+                "ON CONFLICT(key) DO UPDATE SET value='1'"
+            )
+        return self.settings_layout()
+
+    def reset_settings_layout(self) -> dict[str, Any]:
+        with self._lock, self._connection:
+            self._connection.execute("DELETE FROM settings_layout")
+            self._connection.execute(
+                "INSERT INTO stats_meta(key, value) VALUES ('settings_layout_customized', '0') "
+                "ON CONFLICT(key) DO UPDATE SET value='0'"
+            )
+        return self.settings_layout()
 
     def observe(self, state: dict[str, Any]) -> None:
         current_tool = int(state.get("current_tool", -2))

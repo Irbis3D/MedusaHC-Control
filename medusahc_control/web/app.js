@@ -11,6 +11,9 @@ const app = {
   cameraTimer: null,
   pendingAction: null,
   pendingSetting: null,
+  layoutPage: "tuning",
+  layoutDraft: [],
+  draggedLayoutKey: "",
 };
 
 const $ = (selector, root = document) => root.querySelector(selector);
@@ -333,7 +336,7 @@ function confirmAction(action, payload = {}) {
 function confirmPermanentSetting(key) {
   const input = $(`[data-setting-input="${CSS.escape(key)}"]`);
   const definition = app.settings?.schema?.find(item => item.key === key);
-  if (!input || !definition) return;
+  if (!input || !definition || definition.available === false) return;
   const target = definition.kind === "tool_offset" ? "saved_vars.cfg" : "MHC_variables.cfg";
   app.pendingAction = null;
   app.pendingSetting = {key, value: input.value};
@@ -353,24 +356,32 @@ async function loadSettings() {
 
 function renderSettings(payload) {
   const generalGroups = {};
-  const pageDefinitions = payload.schema.filter(item => item.page === app.settingsPage);
+  const pageDefinitions = payload.schema
+    .filter(item => item.page === app.settingsPage && item.visible !== false)
+    .sort((left, right) => Number(left.layout_order || 0) - Number(right.layout_order || 0));
   const toolDefinitions = pageDefinitions.filter(item => Number.isInteger(item.tool));
   pageDefinitions.filter(item => !Number.isInteger(item.tool)).forEach(definition => (generalGroups[definition.group] ||= []).push(definition));
   const tools = [...new Set(toolDefinitions.map(item => item.tool))];
   if (!tools.includes(app.settingsTool)) app.settingsTool = tools[0] || 0;
   const runtimeAvailable = Boolean(app.state?.control_enabled && app.state?.connected && app.state?.klipper_state === "ready");
   const fileAvailable = Boolean(runtimeAvailable && app.state?.capabilities?.can_edit && payload.file_write_available);
-  const fileDisabled = fileAvailable ? "" : "disabled";
   const row = definition => {
-    const value = payload.values[definition.key] ?? "";
+    const available = definition.available !== false;
+    const value = available ? payload.values[definition.key] ?? "" : "";
     const history = payload.history?.[definition.key] || [];
     const setupLocked = definition.page === "setup" && ["printing", "paused"].includes(app.state?.print_state);
-    const runtimeDisabled = runtimeAvailable && !setupLocked ? "" : "disabled";
+    const runtimeDisabled = available && runtimeAvailable && !setupLocked ? "" : "disabled";
+    const fileDisabled = available && fileAvailable && !setupLocked ? "" : "disabled";
+    const inputDisabled = available ? "" : "disabled";
+    const minimum = definition.min === undefined ? "" : ` min="${escapeHtml(definition.min)}"`;
+    const maximum = definition.max === undefined ? "" : ` max="${escapeHtml(definition.max)}"`;
     const input = definition.type === "choice"
-      ? `<select data-setting-input="${escapeHtml(definition.key)}">${definition.choices.map(choice => `<option value="${choice.value}" ${Number(value) === Number(choice.value) ? "selected" : ""}>${escapeHtml(choice.label)}</option>`).join("")}</select>`
-      : `<input data-setting-input="${escapeHtml(definition.key)}" type="number" inputmode="decimal" value="${escapeHtml(value)}" min="${definition.min}" max="${definition.max}" step="${definition.step || 0.1}">`;
+      ? `<select data-setting-input="${escapeHtml(definition.key)}" ${inputDisabled}>${definition.choices.map(choice => `<option value="${choice.value}" ${Number(value) === Number(choice.value) ? "selected" : ""}>${escapeHtml(choice.label)}</option>`).join("")}</select>`
+      : `<input data-setting-input="${escapeHtml(definition.key)}" type="number" inputmode="decimal" value="${escapeHtml(value)}"${minimum}${maximum} step="${definition.step || 0.1}" placeholder="${available ? "" : "Variable not found"}" ${inputDisabled}>`;
     const historyPanel = `<details class="setting-history"><summary>Recent values <span>${history.length}/10</span></summary><div>${history.length ? history.map(item => `<button type="button" data-history-key="${escapeHtml(definition.key)}" data-history-value="${escapeHtml(item.value)}"><strong>${escapeHtml(item.value)}</strong><span>${item.mode === "permanent" ? "Config" : "Applied"} · ${new Date(item.created_at * 1000).toLocaleString()}</span></button>`).join("") : `<p>No values entered through the panel yet.</p>`}</div></details>`;
-    return `<div class="setting-row"><label>${escapeHtml(definition.label)}<span>${escapeHtml(definition.unit || "")}</span></label><div class="setting-control">${input}<button data-setting-mode="runtime" data-setting-key="${escapeHtml(definition.key)}" ${runtimeDisabled}>Apply</button><button class="permanent" data-setting-mode="permanent" data-setting-key="${escapeHtml(definition.key)}" ${fileDisabled}>Save to config</button></div>${historyPanel}</div>`;
+    const description = definition.description ? `<p class="setting-description">${escapeHtml(definition.description).replaceAll("\n", "<br>")}</p>` : "";
+    const unavailable = available ? "" : `<p class="setting-unavailable"><strong>Variable not found.</strong><span>${escapeHtml(definition.availability_reason || definition.variable)}</span></p>`;
+    return `<div class="setting-row ${available ? "" : "setting-row-unavailable"}" draggable="true" data-layout-key="${escapeHtml(definition.layout_key)}"><label>${escapeHtml(definition.label)}<span>${escapeHtml(definition.unit || "")}</span></label>${description}<div class="setting-control">${input}<button data-setting-mode="runtime" data-setting-key="${escapeHtml(definition.key)}" ${runtimeDisabled}>Apply</button><button class="permanent" data-setting-mode="permanent" data-setting-key="${escapeHtml(definition.key)}" ${fileDisabled}>Save to config</button></div>${unavailable}${historyPanel}</div>`;
   };
   const groupDescriptions = {
     "Cleaning and priming": "Shared machine positions used by every tool during priming and brush moves.",
@@ -379,6 +390,9 @@ function renderSettings(payload) {
     Feeder: "Latch movement and motor current for opening and closing the feeder.",
     Calibration: "Shared correction values used by the calibration macros.",
     "Dock coordinates": "Exact X parking position for every installed tool.",
+    "Shared Priming": "Legacy priming values shared by every tool in this configuration.",
+    "Shared First Prime": "Legacy first-prime values shared by every tool in this configuration.",
+    "Shared Cleaning": "Legacy cleaning values shared by every tool in this configuration.",
   };
   const general = Object.entries(generalGroups).map(([group, definitions]) => `<section class="settings-group settings-group-${app.settingsPage}"><div class="settings-group-heading"><div><span class="kicker">${app.settingsPage === "setup" ? "PRINTER" : "GLOBAL"}</span><h3>${escapeHtml(group)}</h3></div><p>${escapeHtml(groupDescriptions[group] || "")}</p></div><div class="settings-grid">${definitions.map(row).join("")}</div></section>`).join("");
   const selected = toolDefinitions.filter(item => item.tool === app.settingsTool);
@@ -390,17 +404,125 @@ function renderSettings(payload) {
     Cleaning: "Brush pattern, cleaning speed and final retract for this tool.",
     Offsets: "XYZ correction applied when this tool is mounted.",
   };
+  const discoveryWarning = payload.discovery_warning ? `<section class="setup-warning settings-discovery-warning"><strong>Variables unavailable</strong><span>${escapeHtml(payload.discovery_warning)}</span></section>` : "";
   const toolPanel = tools.length ? `<section class="settings-group tool-settings-group"><div class="tool-settings-heading"><div><span class="kicker">SELECT ACTIVE PROFILE</span><h3>Tool-specific tuning</h3><p>Only the selected tool is shown below.</p></div><div class="tool-tabs" aria-label="Tool profile">${tools.map(tool => `<button class="${tool === app.settingsTool ? "active" : ""}" data-settings-tool="${tool}">T${tool}</button>`).join("")}</div></div><div class="selected-tool-banner"><strong>T${app.settingsTool}</strong><span>Editing priming, cleaning and offset values for tool T${app.settingsTool}</span></div><div class="tuning-category-grid">${Object.entries(categories).map(([category, definitions]) => `<section class="setting-category category-${category.toLowerCase().replaceAll(" ", "-")}"><div class="setting-category-heading"><div><span class="category-marker"></span><h4>${escapeHtml(category)}</h4></div><p>${escapeHtml(categoryDescriptions[category] || "")}</p></div><div class="settings-grid">${definitions.map(row).join("")}</div></section>`).join("")}</div></section>` : "";
   if (app.settingsPage === "tuning") {
-    $("#tuning-groups").innerHTML = `<section class="tuning-guide"><div><strong>Apply</strong><span>Changes the running value immediately and resets after restart.</span></div><div><strong>Save to config</strong><span>Permanently replaces the stored value after confirmation.</span></div></section>${toolPanel}`;
+    const sharedTuning = general ? `<div class="global-tuning-groups">${general}</div>` : "";
+    $("#tuning-groups").innerHTML = `${discoveryWarning}<section class="tuning-guide"><div><strong>Apply</strong><span>Changes the running value immediately and resets after restart.</span></div><div><strong>Save to config</strong><span>Permanently replaces the stored value after confirmation.</span></div></section>${toolPanel}${sharedTuning}`;
   } else {
-    $("#printer-settings-groups").innerHTML = `<section class="setup-warning"><strong>Idle printer required</strong><span>Permanent changes require confirmation. Verify dock movement at low speed after changing geometry.</span></section>${general}`;
+    $("#printer-settings-groups").innerHTML = `${discoveryWarning}<section class="setup-warning"><strong>Idle printer required</strong><span>Permanent changes require confirmation. Verify dock movement at low speed after changing geometry.</span></section>${general}`;
   }
+}
+
+function layoutCandidates(payload = app.settings) {
+  const candidates = new Map();
+  for (const definition of payload?.schema || []) {
+    const key = String(definition.layout_key || "");
+    if (!key) continue;
+    const existing = candidates.get(key);
+    if (!existing) {
+      candidates.set(key, {
+        layout_key: key,
+        page: definition.page,
+        group: definition.category || definition.group || "Other",
+        macro: /^TOOL_STATE_\d+$/.test(definition.macro) ? "TOOL_STATE_*" : definition.macro,
+        variable: definition.variable,
+        available: definition.available !== false,
+        default_visible: definition.default_visible !== false,
+        visible: definition.visible !== false,
+        description: definition.description || "",
+        order: Number(definition.layout_order || 0),
+      });
+      continue;
+    }
+    existing.available ||= definition.available !== false;
+    existing.default_visible ||= definition.default_visible !== false;
+    existing.visible ||= definition.visible !== false;
+    if (!existing.description && definition.description) existing.description = definition.description;
+    existing.order = Math.min(existing.order, Number(definition.layout_order || 0));
+  }
+  return [...candidates.values()].sort((left, right) => left.order - right.order);
+}
+
+function buildLayoutDraft() {
+  return layoutCandidates().map(item => ({...item}));
+}
+
+function openSettingsLayout(page) {
+  if (!app.settings) return toast("Settings are still loading", true);
+  app.layoutPage = page;
+  app.layoutDraft = buildLayoutDraft();
+  $("#layout-dialog-title").textContent = page === "tuning" ? "Customize print tuning" : "Customize printer settings";
+  $("#layout-search").value = "";
+  renderLayoutEditor();
+  $("#settings-layout-dialog").showModal();
+}
+
+function renderLayoutEditor() {
+  const search = $("#layout-search").value.trim().toLowerCase();
+  const items = app.layoutDraft
+    .filter(item => item.page === app.layoutPage && (item.available || item.visible))
+    .filter(item => !search || `${item.variable} ${item.macro} ${item.group} ${item.description}`.toLowerCase().includes(search))
+    .sort((left, right) => left.order - right.order || left.variable.localeCompare(right.variable));
+  $("#layout-variable-list").innerHTML = items.length ? items.map(item => `
+    <div class="layout-variable-item ${item.available ? "" : "unavailable"}" data-layout-item="${escapeHtml(item.layout_key)}">
+      <input type="checkbox" data-layout-visible="${escapeHtml(item.layout_key)}" ${item.visible ? "checked" : ""}>
+      <div class="layout-variable-name">
+        <strong>${escapeHtml(item.variable)}</strong>
+        <span>${escapeHtml(item.macro)} &middot; ${escapeHtml(item.group)}</span>
+        ${item.available ? "" : "<em>Variable not found in the current configuration</em>"}
+      </div>
+      <textarea data-layout-description="${escapeHtml(item.layout_key)}" rows="2" placeholder="Optional local description">${escapeHtml(item.description)}</textarea>
+    </div>`).join("") : `<p class="muted">No matching variables were found.</p>`;
+}
+
+function visibleLayoutEntries(draft = app.layoutDraft) {
+  return draft
+    .filter(item => item.visible)
+    .sort((left, right) => left.order - right.order)
+    .map(item => ({layout_key: item.layout_key, description: item.description || ""}));
+}
+
+async function saveSettingsLayout(entries = null, closeDialog = true) {
+  try {
+    await api("/api/settings/layout", {
+      method: "POST",
+      body: JSON.stringify({entries: entries || visibleLayoutEntries()}),
+    });
+    if (closeDialog && $("#settings-layout-dialog").open) $("#settings-layout-dialog").close();
+    toast("Variable layout saved");
+    await loadSettings();
+  } catch (error) { toast(error.message, true); }
+}
+
+async function resetSettingsLayout() {
+  try {
+    await api("/api/settings/layout/reset", {method: "POST", body: "{}"});
+    $("#settings-layout-dialog").close();
+    toast("Automatic variable layout restored");
+    await loadSettings();
+  } catch (error) { toast(error.message, true); }
+}
+
+async function persistRenderedOrder(grid) {
+  const page = grid.closest("#view-tuning") ? "tuning" : "setup";
+  const orderedKeys = $$(`[data-layout-key]`, grid).map(item => item.dataset.layoutKey);
+  const draft = buildLayoutDraft();
+  const visibleOnPage = draft.filter(item => item.page === page && item.visible);
+  const visibleKeys = new Set(visibleOnPage.map(item => item.layout_key));
+  const completeOrder = [...orderedKeys, ...visibleOnPage.map(item => item.layout_key).filter(key => !orderedKeys.includes(key))];
+  const rank = new Map(completeOrder.map((key, index) => [key, index]));
+  const pageStart = Math.min(...visibleOnPage.map(item => item.order), 0);
+  for (const item of draft) {
+    if (item.page === page && visibleKeys.has(item.layout_key)) item.order = pageStart + (rank.get(item.layout_key) ?? completeOrder.length);
+  }
+  await saveSettingsLayout(visibleLayoutEntries(draft), false);
 }
 
 async function changeSetting(key, mode, suppliedValue = null) {
   const input = $(`[data-setting-input="${CSS.escape(key)}"]`);
-  if (!input) return;
+  const definition = app.settings?.schema?.find(item => item.key === key);
+  if (!input || !definition || definition.available === false) return;
   try {
     const value = suppliedValue === null ? input.value : suppliedValue;
     const result = await api("/api/settings", {method: "POST", body: JSON.stringify({key, value, mode})});
@@ -436,6 +558,8 @@ function renderStats(stats) {
 document.addEventListener("click", event => {
   const nav = event.target.closest("[data-view]");
   if (nav) return setView(nav.dataset.view);
+  const customizeSettings = event.target.closest("[data-customize-settings]");
+  if (customizeSettings) return openSettingsLayout(customizeSettings.dataset.customizeSettings);
   const select = event.target.closest("[data-select-tool]");
   if (select) {
     const payload = {tool: Number(select.dataset.selectTool)};
@@ -498,6 +622,59 @@ document.addEventListener("click", event => {
   }
 });
 
+document.addEventListener("change", event => {
+  const visibility = event.target.closest("[data-layout-visible]");
+  if (!visibility) return;
+  const item = app.layoutDraft.find(candidate => candidate.layout_key === visibility.dataset.layoutVisible);
+  if (item) item.visible = Boolean(visibility.checked);
+});
+
+document.addEventListener("input", event => {
+  const description = event.target.closest("[data-layout-description]");
+  if (description) {
+    const item = app.layoutDraft.find(candidate => candidate.layout_key === description.dataset.layoutDescription);
+    if (item) item.description = description.value;
+    return;
+  }
+  if (event.target === $("#layout-search")) renderLayoutEditor();
+});
+
+document.addEventListener("dragstart", event => {
+  const row = event.target.closest("[data-layout-key]");
+  if (!row || event.target.closest("input, select, button, details, summary")) return event.preventDefault();
+  app.draggedLayoutKey = row.dataset.layoutKey;
+  row.classList.add("dragging");
+  event.dataTransfer.effectAllowed = "move";
+  event.dataTransfer.setData("text/plain", app.draggedLayoutKey);
+});
+
+document.addEventListener("dragover", event => {
+  const row = event.target.closest("[data-layout-key]");
+  const dragged = document.querySelector(`[data-layout-key="${CSS.escape(app.draggedLayoutKey)}"].dragging`);
+  if (!row || !dragged || row === dragged || row.parentElement !== dragged.parentElement) return;
+  event.preventDefault();
+  $$(".drag-target").forEach(item => item.classList.remove("drag-target"));
+  row.classList.add("drag-target");
+  const after = event.clientY > row.getBoundingClientRect().top + row.offsetHeight / 2;
+  row.parentElement.insertBefore(dragged, after ? row.nextSibling : row);
+});
+
+document.addEventListener("drop", event => {
+  const dragged = $(".setting-row.dragging");
+  if (!dragged) return;
+  event.preventDefault();
+  const grid = dragged.parentElement;
+  dragged.classList.remove("dragging");
+  $$(".drag-target").forEach(item => item.classList.remove("drag-target"));
+  app.draggedLayoutKey = "";
+  persistRenderedOrder(grid);
+});
+
+document.addEventListener("dragend", () => {
+  $$(".dragging, .drag-target").forEach(item => item.classList.remove("dragging", "drag-target"));
+  app.draggedLayoutKey = "";
+});
+
 $("#mode-toggle").addEventListener("click", () => {
   if (!app.state?.control_available) return;
   return setControlMode(!app.state.control_enabled);
@@ -516,6 +693,9 @@ $("#confirm-toggle").addEventListener("change", event => {
 document.addEventListener("input", event => {
   if (event.target.matches("[data-temp-input]")) event.target.dataset.edited = "true";
 });
+
+$("#save-settings-layout").addEventListener("click", () => saveSettingsLayout());
+$("#reset-settings-layout").addEventListener("click", resetSettingsLayout);
 
 $("#cool-all").addEventListener("click", async () => {
   if (!app.state) return;

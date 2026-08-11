@@ -10,6 +10,8 @@ import time
 from pathlib import Path
 from typing import Any
 
+from .settings import inspect_variable_config
+
 
 class ConfigStore:
     """Safely writes validated MedusaHC macro values to their source config."""
@@ -22,6 +24,12 @@ class ConfigStore:
     @property
     def available(self) -> bool:
         return self.variables_config.is_file()
+
+    def inspect_variables(self) -> dict[tuple[str, str], dict[str, Any]]:
+        with self._lock:
+            if not self.available:
+                raise ValueError(f"MedusaHC variables file was not found: {self.variables_config}")
+            return inspect_variable_config(self.variables_config.read_text(encoding="utf-8"))
 
     def save_permanent(self, definition: dict[str, Any], value: float | int) -> None:
         with self._lock:

@@ -9,14 +9,6 @@ from typing import Any
 GREEN = {"00C853", "00FF00"}
 RED = {"D32F2F", "FF0000"}
 BLUE = {"1976D2", "0000FF"}
-TOOL_PROCESS_VARIABLES = (
-    "prime_amount", "prime_speed", "prime_retract", "prime_retract_speed",
-    "clean_move", "x_clean_move", "y_clean_move", "clean_move_speed",
-    "ptfe_clean_slow_speed", "clean_retract", "clean_retract_speed",
-    "first_prime_flag", "first_prime_amount", "first_prime_speed",
-)
-
-
 def _macro(status: dict[str, Any], name: str) -> dict[str, Any]:
     value = status.get(f"gcode_macro {name}", {})
     return value if isinstance(value, dict) else {}
@@ -30,11 +22,17 @@ def normalize_status(status: dict[str, Any]) -> dict[str, Any]:
     tool_count = _tool_count(status, global_state, pin_watch)
     current_tool = int(pin_watch.get("current_tool", -2))
     raw_sensors = pin_watch.get("sensors", {}) or {}
+    macro_values = {
+        "TOOL_CFG": _numeric_variables(tool_cfg),
+        "GLOBAL_STATE": _numeric_variables(global_state),
+        "TOOL_OFFSET": _numeric_variables(offsets),
+    }
 
     tools = []
     for index in range(tool_count):
         macro = _macro(status, f"T{index}")
         tool_state = _macro(status, f"TOOL_STATE_{index}")
+        macro_values[f"TOOL_STATE_{index}"] = _numeric_variables(tool_state)
         heater_name = "extruder" if index == 0 else f"extruder{index}"
         heater = status.get(heater_name, {}) or {}
         color = str(macro.get("color", "")).replace("#", "").upper()
@@ -66,11 +64,7 @@ def normalize_status(status: dict[str, Any]) -> dict[str, Any]:
                     "y": float(offsets.get(f"t{index}_off_y", 0.0)),
                     "z": float(offsets.get(f"t{index}_off_z", 0.0)),
                 },
-                "process": {
-                    name: int(tool_state.get(name, 0)) if name in {"clean_move", "first_prime_flag"}
-                    else float(tool_state.get(name, 0.0))
-                    for name in TOOL_PROCESS_VARIABLES
-                },
+                "process": _numeric_variables(tool_state),
             }
         )
 
@@ -114,6 +108,7 @@ def normalize_status(status: dict[str, Any]) -> dict[str, Any]:
         "tools": tools,
         "sensors": {str(key): int(value) for key, value in raw_sensors.items()},
         "settings": settings,
+        "macro_values": macro_values,
         "capabilities": {
             "can_home": ready and not printing,
             "can_jog": ready and not printing,
@@ -180,6 +175,7 @@ def disconnected_state(message: str) -> dict[str, Any]:
         "tools": [],
         "sensors": {},
         "settings": {},
+        "macro_values": {},
         "capabilities": {key: False for key in ("can_home", "can_jog", "can_heat", "can_select", "can_drop", "can_clean", "can_feeder", "can_calibrate", "can_edit", "can_system")},
         "message": message,
     }
@@ -191,6 +187,16 @@ def _state_message(current_tool: int, sensor_error: bool) -> str:
     if current_tool == -1:
         return "Toolhead is empty"
     return f"T{current_tool} is mounted"
+
+
+def _numeric_variables(values: dict[str, Any]) -> dict[str, float | int]:
+    result: dict[str, float | int] = {}
+    for name, value in values.items():
+        if str(name).startswith("_") or isinstance(value, bool):
+            continue
+        if isinstance(value, (int, float)):
+            result[str(name)] = value
+    return result
 
 
 class Simulator:
@@ -235,6 +241,11 @@ class Simulator:
                 "clean_retract_speed": 30, "first_prime_flag": 1,
                 "first_prime_amount": 20, "first_prime_speed": 20,
             }
+            raw["gcode_macro TOOL_OFFSET"].update({
+                f"t{index}_off_x": 0.0,
+                f"t{index}_off_y": 0.0,
+                f"t{index}_off_z": 0.0,
+            })
         return raw
 
     def snapshot(self) -> dict[str, Any]:
