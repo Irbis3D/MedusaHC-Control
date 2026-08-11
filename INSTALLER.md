@@ -99,6 +99,10 @@ curl -fsSL https://raw.githubusercontent.com/Irbis3D/MedusaHC-Control/main/insta
 
 ## Files owned by the installer
 
+For the complete file-by-file inventory, conditional changes, persistent data,
+legacy cleanup and manual recovery procedure, see
+[`FILES_AND_MANUAL_CLEANUP.md`](FILES_AND_MANUAL_CLEANUP.md).
+
 - `~/medusahc-control` — clean application Git repository owned by the printer user.
 - `/var/lib/medusahc-control` — configuration, statistics, manifest and backups.
 - `/etc/systemd/system/medusahc-control.service` — one isolated service.
