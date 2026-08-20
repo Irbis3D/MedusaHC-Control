@@ -37,7 +37,7 @@ instead of assuming the default paths on a non-standard installation.
 | `/etc/systemd/system/medusahc-control.service` | Isolated systemd service that starts the dashboard. | Every installation or update. | Removed. |
 | `/etc/systemd/system/multi-user.target.wants/medusahc-control.service` | Enablement symlink created by `systemctl enable`. | Every installation. | Removed by `systemctl disable`. |
 | `~/klipper/klippy/extras/mhc_dashboard.py` | Symlink to `~/medusahc-control/printer/mhc_dashboard.py`. It provides the read-only Klipper-side dashboard object and pin state. | Only if no file or symlink already exists at this path. The exact path is `ADAPTER_TARGET` in the manifest. | Removed only if the installer recorded it as managed and it is still a symlink. |
-| `~/printer_data/config/medusahc_control.cfg` | Small Klipper configuration containing `[mhc_dashboard]`. | Created when `printer.cfg` does not already contain an `[mhc_dashboard]` section, including manual printer-config mode. | Removed when it was installer-managed. |
+| `~/printer_data/config/medusahc_control.cfg` | Small, optional dashboard-only Klipper configuration containing `[mhc_dashboard]`. | Created when `printer.cfg` does not already contain an `[mhc_dashboard]` section, including manual printer-config mode. | Removed when it was installer-managed. |
 | `~/printer_data/moonraker.asvc` | Moonraker service authorization list. If missing, it is created before the `medusahc-control` service name is added. | Only when automatic Moonraker Update Manager integration is accepted. | The file is kept; only the exact `medusahc-control` line is removed. |
 
 ### Ownership and permissions set by the installer
@@ -67,7 +67,8 @@ path in both places.
 
 The current installer does not create a Python virtual environment, install
 APT or pip packages, modify nginx or Mainsail, replace Moonraker or Klipper, or
-rewrite existing MedusaHC macro files. It uses the host's `/usr/bin/python3`
+change the installed MedusaHC controller. It never writes `medusahc.py`,
+`MHC_macros.cfg` or `MHC_variables.cfg`. It uses the host's `/usr/bin/python3`
 and runs the Python package directly from the application Git clone.
 
 ## Existing files modified by the installer

@@ -22,7 +22,12 @@ def normalize_status(status: dict[str, Any]) -> dict[str, Any]:
     saved_values = save_variables.get("variables", {}) if isinstance(save_variables, dict) else {}
     if not isinstance(saved_values, dict):
         saved_values = {}
-    pin_watch = status.get("mhc_dashboard", {}) or status.get("pin_watch io", {}) or {}
+    pin_watch = (
+        status.get("medusahc", {})
+        or status.get("mhc_dashboard", {})
+        or status.get("pin_watch io", {})
+        or {}
+    )
     tool_count = _tool_count(status, global_state, pin_watch)
     current_tool = int(pin_watch.get("current_tool", -2))
     raw_sensors = pin_watch.get("sensors", {}) or {}
@@ -106,9 +111,11 @@ def normalize_status(status: dict[str, Any]) -> dict[str, Any]:
         "layout": "front" if int(tool_cfg.get("tools_direction", 1)) == 1 else "rear",
         "tool_count": tool_count,
         "current_tool": current_tool,
-        "target_tool": int(global_state.get("target_tool", -1)),
+        "target_tool": int(pin_watch.get("target_tool", global_state.get("target_tool", -1))),
         "sensor_error": sensor_error,
-        "feeder_open": bool(global_state.get("feeder_open", 0)),
+        "feeder_open": bool(pin_watch.get("feeder_open", global_state.get("feeder_open", 0))),
+        "operation": str(pin_watch.get("operation", "idle")),
+        "last_error": str(pin_watch.get("last_error", "")),
         "tools": tools,
         "sensors": {str(key): int(value) for key, value in raw_sensors.items()},
         "settings": settings,
@@ -235,6 +242,8 @@ class Simulator:
                 "clean_speed": 50,
                 "e_open": -5.0,
                 "e_close": 3.0,
+                "servo_open_angle": 180,
+                "servo_close_angle": 0,
                 "e_cur_high_mult": 1.7,
                 **{f"x_t{i}": 17 + i * 57 for i in range(tool_count)},
             },
@@ -251,6 +260,8 @@ class Simulator:
                 "ptfe_clean_slow_speed": 5, "clean_retract": 1,
                 "clean_retract_speed": 30, "first_prime_flag": 1,
                 "first_prime_amount": 20, "first_prime_speed": 20,
+                "first_prime_prime_retract": 0.2,
+                "first_prime_clean_retract": 0.1,
             }
             raw["gcode_macro TOOL_OFFSET"].update({
                 f"t{index}_off_x": 0.0,

@@ -13,9 +13,18 @@ Open an SSH terminal on the printer and run one command:
 curl -fsSL https://raw.githubusercontent.com/Irbis3D/MedusaHC-Control/main/install-online.sh | sudo bash
 ```
 
-The system may request the normal sudo password. The installer first asks for
-the web interface port. Press Enter to use `8090`, or enter another port.
-It then asks two independent questions: whether it may add its marked include
+The system may request the normal sudo password. The bootstrap first asks
+which MedusaHC controller is already installed:
+
+1. Macro version — downloads the stable panel from `main`.
+2. Python-script version — downloads the matching panel from
+   `python-controller`.
+
+This choice affects only the panel version. The installer never installs,
+replaces or removes the MedusaHC controller or its macros.
+
+The installer then asks for the web interface port. Press Enter to use `8090`,
+or enter another port. It also asks two independent questions: whether it may add its marked include
 to `printer.cfg`, and whether it may register the project in `moonraker.conf`
 for Mainsail updates. Press Enter to accept each default automatic integration,
 or answer `n` to receive the exact manual instructions instead.
@@ -27,8 +36,10 @@ of tools. It refuses to continue during an active or paused print. Before
 editing either main configuration file, it asks separately whether each managed
 include may be added automatically.
 
-Updates reuse the saved port without asking again. For unattended installation,
-`--yes` uses port `8090`; set `MEDUSAHC_PORT` to choose a different port.
+Updates reuse both the saved panel branch and port without asking again. For
+unattended installation, set `MEDUSAHC_CONTROL_REF=main` or
+`MEDUSAHC_CONTROL_REF=python-controller`; `--yes` uses port `8090`, and
+`MEDUSAHC_PORT` selects a different port.
 
 The installer treats everything from Klipper's `SAVE_CONFIG` marker to the end
 of `printer.cfg` as protected calibration data. Automatic install and uninstall

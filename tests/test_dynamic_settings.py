@@ -20,6 +20,8 @@ CURRENT_CONFIG = """
 # Safe rack clearance.
 variable_y_safe: 330
 variable_x_t0: 45
+variable_servo_open_angle: 180
+variable_servo_close_angle: 0
 
 [gcode_macro TOOL_STATE_0]
 # Extrusion before printing.
@@ -81,6 +83,9 @@ class VariableInspectionTests(unittest.TestCase):
         self.assertTrue(by_key["t0_prime_amount"]["available"])
         self.assertEqual(by_key["t0_prime_amount"]["configured_value"], 18)
         self.assertEqual(by_key["y_safe"]["configured_value"], 330)
+        self.assertEqual(by_key["servo_open_angle"]["configured_value"], 180)
+        self.assertEqual(by_key["servo_close_angle"]["configured_value"], 0)
+        self.assertEqual(by_key["servo_open_angle"]["group"], "Feeder")
         self.assertEqual(by_key["t0_prime_amount"]["label"], "prime_amount")
         self.assertTrue(by_key["t0_x_clean_move"]["default_visible"])
         self.assertTrue(by_key["t0_ptfe_clean_slow_speed"]["default_visible"])
@@ -121,6 +126,42 @@ class VariableInspectionTests(unittest.TestCase):
 
 
 class LayoutDatabaseTests(unittest.TestCase):
+    def test_stats_ignore_transient_sensor_error_during_successful_change(self) -> None:
+        database = StatsDatabase(":memory:")
+        try:
+            database.observe({"current_tool": 0, "print_state": "printing", "last_error": ""})
+            database.observe({"current_tool": -2, "print_state": "printing", "last_error": "", "operation": "dropping"})
+            database.observe({"current_tool": -1, "print_state": "printing", "last_error": "", "operation": "dropping"})
+            database.observe({"current_tool": -2, "print_state": "printing", "last_error": "", "operation": "picking"})
+            database.observe({"current_tool": 1, "print_state": "printing", "last_error": "", "operation": "idle"})
+            summary = database.summary()
+            self.assertEqual(summary["totals"]["toolchange_failed"], 0)
+            self.assertEqual(summary["totals"]["tool_park"], 1)
+            self.assertEqual(summary["totals"]["tool_pickup"], 1)
+        finally:
+            database.close()
+
+    def test_stats_record_each_controller_error_once(self) -> None:
+        database = StatsDatabase(":memory:")
+        try:
+            database.observe({"current_tool": 0, "print_state": "printing", "last_error": "", "target_tool": 1})
+            failed = {
+                "current_tool": -2,
+                "print_state": "paused",
+                "last_error": "MHC_SET: sensors did not confirm T1",
+                "operation": "idle",
+                "target_tool": 1,
+            }
+            database.observe(failed)
+            database.observe(failed)
+            summary = database.summary()
+            self.assertEqual(summary["totals"]["toolchange_failed"], 1)
+            self.assertEqual(summary["per_tool"][0]["tool"], 1)
+            self.assertEqual(summary["per_tool"][0]["errors"], 1)
+            self.assertEqual(summary["recent"][0]["details"]["message"], failed["last_error"])
+        finally:
+            database.close()
+
     def test_speed_apply_updates_source_and_runtime_feedrate(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             service = ControlService(AppConfig(

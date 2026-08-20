@@ -21,6 +21,7 @@ const app = {
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, char => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[char]));
+const validViews = new Set(["overview", "calibration", "tuning", "statistics", "printer-settings"]);
 
 async function api(path, options = {}) {
   const headers = {"Content-Type": "application/json", ...(options.headers || {})};
@@ -40,6 +41,8 @@ function toast(message, isError = false) {
 }
 
 function setView(name) {
+  if (!validViews.has(name)) name = "overview";
+  sessionStorage.setItem("medusahc-active-view", name);
   const settingsPage = name === "tuning" ? "tuning" : name === "printer-settings" ? "setup" : "";
   if (app.reorderPage && app.reorderPage !== settingsPage) {
     app.reorderPage = "";
@@ -867,6 +870,8 @@ $("#confirm-dialog").addEventListener("close", event => {
   }
 });
 
+const savedView = sessionStorage.getItem("medusahc-active-view");
+setView(validViews.has(savedView) ? savedView : "overview");
 loadState();
 loadStats();
 loadCamera();

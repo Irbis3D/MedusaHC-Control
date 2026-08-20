@@ -7,7 +7,7 @@ LEGACY_APP_DIR="/opt/${APP_NAME}"
 STATE_DIR="/var/lib/${APP_NAME}"
 SERVICE_FILE="/etc/systemd/system/${APP_NAME}.service"
 REPOSITORY_URL="https://github.com/Irbis3D/MedusaHC-Control.git"
-PRIMARY_BRANCH="main"
+PRIMARY_BRANCH="${MEDUSAHC_CONTROL_REF:-main}"
 CONFIG_FILE="${STATE_DIR}/config.json"
 MANIFEST_FILE="${STATE_DIR}/install-state.env"
 MANAGED_BEGIN="# >>> MEDUSAHC CONTROL >>>"
@@ -51,6 +51,13 @@ for argument in "$@"; do
     *) echo "Unknown argument: ${argument}" >&2; usage >&2; exit 2 ;;
   esac
 done
+
+if [[ "${action}" == "update" && -z "${MEDUSAHC_CONTROL_REF:-}" && -f "${MANIFEST_FILE}" ]]; then
+  saved_panel_branch="$(sed -nE 's/^PANEL_BRANCH=([^[:space:]]+)$/\1/p' "${MANIFEST_FILE}" | head -1)"
+  if [[ -n "${saved_panel_branch}" ]]; then
+    PRIMARY_BRANCH="${saved_panel_branch}"
+  fi
+fi
 
 log() { printf '[MedusaHC Control] %s\n' "$*"; }
 die() { printf '[MedusaHC Control] ERROR: %s\n' "$*" >&2; exit 1; }
@@ -223,6 +230,7 @@ choose_moonraker_mode() {
 check_sources() {
   [[ -d "${SCRIPT_DIR}/medusahc_control" ]] || die "medusahc_control package is missing next to install.sh."
   [[ -f "${SCRIPT_DIR}/printer/mhc_dashboard.py" ]] || die "printer/mhc_dashboard.py is missing."
+  [[ -f "${SCRIPT_DIR}/printer/medusahc_control.cfg" ]] || die "printer/medusahc_control.cfg is missing."
   [[ -f "${SCRIPT_DIR}/VERSION" ]] || die "VERSION is missing next to install.sh."
   command -v git >/dev/null 2>&1 || die "git is required."
   python3 -c 'import sys; assert sys.version_info >= (3, 9), "Python 3.9 or newer is required"'
@@ -292,11 +300,7 @@ PY
 }
 
 write_dashboard_cfg() {
-  cat > "${managed_cfg}" <<'EOF'
-# Managed by MedusaHC Control. Remove through: sudo ./install.sh uninstall
-[mhc_dashboard]
-pin_watch: pin_watch io
-EOF
+  cp "${SCRIPT_DIR}/printer/medusahc_control.cfg" "${managed_cfg}"
   chown "${install_user}:${install_group}" "${managed_cfg}"
   chmod 0644 "${managed_cfg}"
 }
@@ -574,6 +578,7 @@ write_manifest() {
     printf 'MANAGED_CFG=%q\n' "${managed_cfg}"
     printf 'ADAPTER_TARGET=%q\n' "${adapter_target}"
     printf 'ADAPTER_MODE=%q\n' "${adapter_mode}"
+    printf 'PANEL_BRANCH=%q\n' "${PRIMARY_BRANCH}"
     printf 'CONFIG_MODE=%q\n' "${config_mode}"
     printf 'MOONRAKER_MODE=%q\n' "${moonraker_mode}"
     printf 'PORT=%q\n' "${port}"
@@ -767,8 +772,10 @@ self_test() {
   original="${test_dir}/printer.original.cfg"
   moonraker_cfg="${test_dir}/moonraker.conf"
   moonraker_original="${test_dir}/moonraker.original.conf"
+  variables_cfg="${test_dir}/MHC_variables.cfg"
   printf '[include MHC_variables.cfg]\n\n#*# <---------------------- SAVE_CONFIG ---------------------->\n#*# test = 1\n' > "${printer_cfg}"
   printf '[server]\nhost: 0.0.0.0\n' > "${moonraker_cfg}"
+  printf '[include MHC_config.cfg]\n[include MHC_macros.cfg]\n' > "${variables_cfg}"
   cp "${printer_cfg}" "${original}"
   manual_config=1
   assume_yes=0

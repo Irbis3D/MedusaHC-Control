@@ -28,6 +28,11 @@ Support for different printers and MedusaHC layouts is still being developed.
 The panel expects an already installed and working MedusaHC configuration. It
 does not yet provide the complete setup wizard planned for future versions.
 
+MedusaHC Control is independent of the tool-change implementation. The online
+installer asks whether the printer uses the macro-based or Python-script-based
+MedusaHC controller and downloads the matching panel branch. It never installs,
+replaces or removes either controller, `MHC_macros.cfg` or `MHC_variables.cfg`.
+
 ## What it can do
 
 - Show the active tool, dock sensors, feeder state and connection state.

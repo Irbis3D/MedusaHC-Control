@@ -19,6 +19,8 @@ BASE_SETTINGS: tuple[dict[str, Any], ...] = (
     {"key": "clean_speed", "macro": "TOOL_CFG", "variable": "clean_speed", "label": "Brush movement", "group": "Motion", "unit": "mm/s", "min": 1, "max": 300, "step": 1, "runtime_targets": [{"macro": "GLOBAL_STATE", "variable": "clean_feedrate", "multiplier": 60}]},
     {"key": "e_open", "macro": "TOOL_CFG", "variable": "e_open", "label": "Feeder open movement", "group": "Feeder", "unit": "mm", "min": -30, "max": 30, "step": 0.1},
     {"key": "e_close", "macro": "TOOL_CFG", "variable": "e_close", "label": "Feeder close movement", "group": "Feeder", "unit": "mm", "min": -30, "max": 30, "step": 0.1},
+    {"key": "servo_open_angle", "macro": "TOOL_CFG", "variable": "servo_open_angle", "label": "Servo open angle", "group": "Feeder", "unit": "°", "min": 0, "max": 180, "step": 1},
+    {"key": "servo_close_angle", "macro": "TOOL_CFG", "variable": "servo_close_angle", "label": "Servo close angle", "group": "Feeder", "unit": "°", "min": 0, "max": 180, "step": 1},
     {"key": "e_cur_high_mult", "macro": "TOOL_CFG", "variable": "e_cur_high_mult", "label": "Feeder current multiplier", "group": "Feeder", "min": 1, "max": 2.2, "step": 0.05},
     {"key": "eddy_z", "macro": "GLOBAL_STATE", "variable": "eddy_z", "label": "Additional tap Z offset", "group": "Calibration", "unit": "mm", "min": -5, "max": 5, "step": 0.01},
 )
@@ -32,6 +34,8 @@ TOOL_SETTINGS: tuple[dict[str, Any], ...] = (
     {"variable": "first_prime_flag", "category": "First Prime", "type": "choice", "choices": [{"value": 1, "label": "Enabled"}, {"value": 0, "label": "Disabled"}]},
     {"variable": "first_prime_amount", "category": "First Prime", "unit": "mm", "min": 0, "max": 100, "step": 0.1},
     {"variable": "first_prime_speed", "category": "First Prime", "unit": "mm/s", "min": 0.1, "max": 100, "step": 0.1},
+    {"variable": "first_prime_prime_retract", "category": "First Prime", "unit": "mm", "min": 0, "max": 20, "step": 0.1},
+    {"variable": "first_prime_clean_retract", "category": "First Prime", "unit": "mm", "min": 0, "max": 20, "step": 0.1},
     {"variable": "clean_move", "category": "Cleaning", "type": "choice", "choices": [{"value": 1, "label": "Enabled"}, {"value": 0, "label": "Disabled"}]},
     {"variable": "x_clean_move", "category": "Cleaning", "unit": "mm", "min": 0, "max": 50, "step": 0.1},
     {"variable": "y_clean_move", "category": "Cleaning", "unit": "mm", "min": 0, "max": 50, "step": 0.1},
