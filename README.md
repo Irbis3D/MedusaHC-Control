@@ -8,6 +8,14 @@ otherwise spread across macros and configuration files.
 
 MedusaHC Control is part of the [MedusaHC project](https://github.com/Irbis3D/MedusaHC).
 
+## Support the project
+
+If this project is useful to you, you can support its continued development
+through [Patreon](https://patreon.com/Irbis3D), make a one-time contribution at
+[Buy Me a Coffee](https://buymeacoffee.com/Irbis3D), or use YouTube Super Thanks
+on the [Irbis3D channel](https://youtube.com/@Irbis3D). Support helps fund parts,
+testing hardware and the time needed to maintain the project.
+
 > [!WARNING]
 > This project is experimental and is not yet intended for unattended use. It
 > was created with extensive AI assistance ("vibe coding") and has not been
@@ -28,10 +36,9 @@ Support for different printers and MedusaHC layouts is still being developed.
 The panel expects an already installed and working MedusaHC configuration. It
 does not yet provide the complete setup wizard planned for future versions.
 
-MedusaHC Control is independent of the tool-change implementation. The online
-installer asks whether the printer uses the macro-based or Python-script-based
-MedusaHC controller and downloads the matching panel branch. It never installs,
-replaces or removes either controller, `MHC_macros.cfg` or `MHC_variables.cfg`.
+This edition of MedusaHC Control supports the Python-script-based MedusaHC
+controller. It never installs, replaces or removes the controller,
+`MHC_macros.cfg` or `MHC_variables.cfg`.
 
 ## What it can do
 
@@ -146,12 +153,6 @@ python -m medusahc_control --simulate --port 8090
 ```
 
 Then open `http://127.0.0.1:8090`.
-
-## Support the projects
-
-- [Patreon](https://patreon.com/Irbis3D)
-- [Buy Me a Coffee](https://buymeacoffee.com/Irbis3D)
-- [YouTube](https://youtube.com/@Irbis3D)
 
 ## License
 

@@ -7,7 +7,7 @@ LEGACY_APP_DIR="/opt/${APP_NAME}"
 STATE_DIR="/var/lib/${APP_NAME}"
 SERVICE_FILE="/etc/systemd/system/${APP_NAME}.service"
 REPOSITORY_URL="https://github.com/Irbis3D/MedusaHC-Control.git"
-PRIMARY_BRANCH="${MEDUSAHC_CONTROL_REF:-main}"
+PRIMARY_BRANCH="${MEDUSAHC_CONTROL_REF:-python-controller}"
 CONFIG_FILE="${STATE_DIR}/config.json"
 MANIFEST_FILE="${STATE_DIR}/install-state.env"
 MANAGED_BEGIN="# >>> MEDUSAHC CONTROL >>>"
@@ -51,13 +51,6 @@ for argument in "$@"; do
     *) echo "Unknown argument: ${argument}" >&2; usage >&2; exit 2 ;;
   esac
 done
-
-if [[ "${action}" == "update" && -z "${MEDUSAHC_CONTROL_REF:-}" && -f "${MANIFEST_FILE}" ]]; then
-  saved_panel_branch="$(sed -nE 's/^PANEL_BRANCH=([^[:space:]]+)$/\1/p' "${MANIFEST_FILE}" | head -1)"
-  if [[ -n "${saved_panel_branch}" ]]; then
-    PRIMARY_BRANCH="${saved_panel_branch}"
-  fi
-fi
 
 log() { printf '[MedusaHC Control] %s\n' "$*"; }
 die() { printf '[MedusaHC Control] ERROR: %s\n' "$*" >&2; exit 1; }
