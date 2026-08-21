@@ -16,6 +16,25 @@ through [Patreon](https://patreon.com/Irbis3D), make a one-time contribution at
 on the [Irbis3D channel](https://youtube.com/@Irbis3D). Support helps fund parts,
 testing hardware and the time needed to maintain the project.
 
+## Two editions during the Python transition
+
+MedusaHC is currently transitioning from the original macro-based tool-change
+controller to the new Python controller. During this transition, two editions
+of MedusaHC Control are maintained and published side by side:
+
+- **Macro edition** — for printers still using the original MedusaHC macros.
+- **Python edition** — for printers using
+  [MedusaHC-Python-Controller](https://github.com/Irbis3D/MedusaHC-Python-Controller).
+
+Choose the panel edition that matches the controller already installed on the
+printer. The panel installer does not install, replace or convert the MedusaHC
+controller. Both editions are available on the
+[Releases page](https://github.com/Irbis3D/MedusaHC-Control/releases).
+
+The Macro edition is a temporary compatibility release. Once the transition to
+the Python controller is complete, the Macro edition will be retired and the
+Python edition will become the only actively maintained version.
+
 > [!WARNING]
 > This project is experimental and is not yet intended for unattended use. It
 > was created with extensive AI assistance ("vibe coding") and has not been
