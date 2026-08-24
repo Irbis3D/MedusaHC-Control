@@ -29,7 +29,8 @@ TOOL_SETTINGS: tuple[dict[str, Any], ...] = (
     {"variable": "prime_speed", "category": "Priming", "unit": "mm/s", "min": 0.1, "max": 100, "step": 0.1},
     {"variable": "prime_retract", "category": "Priming", "unit": "mm", "min": 0, "max": 20, "step": 0.1},
     {"variable": "prime_retract_speed", "category": "Priming", "unit": "mm/s", "min": 0.1, "max": 100, "step": 0.1},
-    {"variable": "first_prime_flag", "category": "First Prime", "type": "choice", "choices": [{"value": 1, "label": "Enabled"}, {"value": 0, "label": "Disabled"}]},
+    {"variable": "first_prime_enabled", "category": "First Prime", "type": "choice", "choices": [{"value": 1, "label": "Enabled"}, {"value": 0, "label": "Disabled"}]},
+    {"variable": "first_prime_flag", "category": "First Prime"},
     {"variable": "first_prime_amount", "category": "First Prime", "unit": "mm", "min": 0, "max": 100, "step": 0.1},
     {"variable": "first_prime_speed", "category": "First Prime", "unit": "mm/s", "min": 0.1, "max": 100, "step": 0.1},
     {"variable": "clean_move", "category": "Cleaning", "type": "choice", "choices": [{"value": 1, "label": "Enabled"}, {"value": 0, "label": "Disabled"}]},
@@ -149,7 +150,7 @@ def schema_for(
                 template["description"] = str(metadata.get("description", ""))
                 definition = _tool_definition(tool, template, available=True)
                 definition["configured_value"] = metadata.get("numeric_value")
-                definition["internal"] = bool(metadata.get("internal"))
+                definition["internal"] = bool(metadata.get("internal")) or variable == "first_prime_flag"
                 definition["default_visible"] = category is not None and not definition["internal"]
                 schema.append(definition)
                 found_names.add(variable)

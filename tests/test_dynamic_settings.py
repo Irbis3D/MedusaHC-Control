@@ -24,6 +24,8 @@ variable_x_t0: 45
 [gcode_macro TOOL_STATE_0]
 # Extrusion before printing.
 variable_prime_amount: 18
+variable_first_prime_enabled: 1
+variable_first_prime_flag: 0
 variable_x_clean_move: 4
 variable_y_clean_move: 5
 # PTFE cleaning speed.
@@ -84,6 +86,8 @@ class VariableInspectionTests(unittest.TestCase):
         self.assertEqual(by_key["t0_prime_amount"]["label"], "prime_amount")
         self.assertTrue(by_key["t0_x_clean_move"]["default_visible"])
         self.assertTrue(by_key["t0_ptfe_clean_slow_speed"]["default_visible"])
+        self.assertTrue(by_key["t0_first_prime_enabled"]["default_visible"])
+        self.assertFalse(by_key["t0_first_prime_flag"]["default_visible"])
         self.assertFalse(by_key["t0_internal_counter"]["default_visible"])
 
     def test_old_config_discovers_old_names_without_crashing(self) -> None:
