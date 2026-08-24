@@ -198,7 +198,7 @@ class ControlService:
             entry = entries.get(str(definition["layout_key"]))
             definition["visible"] = entry is not None
             definition["layout_order"] = int(entry.get("position", 0)) if entry else 1_000_000
-            if entry is not None:
+            if entry is not None and not str(definition.get("description", "")).strip():
                 definition["description"] = str(entry.get("description", ""))
 
     def save_settings_layout(self, entries: Any) -> dict[str, Any]:

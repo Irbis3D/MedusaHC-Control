@@ -397,7 +397,11 @@ function renderSettings(payload) {
       ? `<select data-setting-input="${escapeHtml(definition.key)}" ${inputDisabled}>${definition.choices.map(choice => `<option value="${choice.value}" ${Number(value) === Number(choice.value) ? "selected" : ""}>${escapeHtml(choice.label)}</option>`).join("")}</select>`
       : `<input data-setting-input="${escapeHtml(definition.key)}" type="number" inputmode="decimal" value="${escapeHtml(value)}"${minimum}${maximum} step="${definition.step || 0.1}" placeholder="${available ? "" : "Variable not found"}" ${inputDisabled}>`;
     const historyPanel = `<details class="setting-history"><summary>Recent values <span>${history.length}/10</span></summary><div>${history.length ? history.map(item => `<button type="button" data-history-key="${escapeHtml(definition.key)}" data-history-value="${escapeHtml(item.value)}"><strong>${escapeHtml(item.value)}</strong><span>${item.mode === "permanent" ? "Config" : "Applied"} · ${new Date(item.created_at * 1000).toLocaleString()}</span></button>`).join("") : `<p>No values entered through the panel yet.</p>`}</div></details>`;
-    const description = definition.description ? `<p class="setting-description">${escapeHtml(definition.description).replaceAll("\n", "<br>")}</p>` : "";
+    const description = definition.description ? `<div class="setting-tooltip" role="tooltip">${escapeHtml(definition.description).replaceAll("\n", "<br>")}</div>` : "";
+    const variableName = escapeHtml(definition.variable || definition.label);
+    const variableHeader = definition.description
+      ? `<div class="setting-variable-header"><button type="button" class="setting-variable-help" data-setting-help aria-expanded="false"><span>${variableName}</span><span class="setting-help-mark" aria-hidden="true">?</span></button><span class="setting-unit">${escapeHtml(definition.unit || "")}</span>${description}</div>`
+      : `<div class="setting-variable-header"><span class="setting-variable-name">${variableName}</span><span class="setting-unit">${escapeHtml(definition.unit || "")}</span></div>`;
     const unavailable = available ? "" : `<p class="setting-unavailable"><strong>Variable not found.</strong><span>${escapeHtml(definition.availability_reason || definition.variable)}</span></p>`;
     const configuredChoice = definition.type === "choice"
       ? definition.choices.find(choice => Number(choice.value) === Number(definition.configured_value))
@@ -406,7 +410,7 @@ function renderSettings(payload) {
     const temporaryValueActive = hasConfiguredValue && value !== "" && Number(value) !== Number(definition.configured_value);
     const configured = hasConfiguredValue ? `<p class="configured-value ${temporaryValueActive ? "changed" : ""}">${temporaryValueActive ? "Temporary value active · " : ""}Saved config: <strong>${escapeHtml(configuredLabel)}</strong></p>` : "";
     const reorderAttributes = reorderEnabled ? ` draggable="true" aria-grabbed="false"` : "";
-    return `<div class="setting-row ${available ? "" : "setting-row-unavailable"} ${reorderEnabled ? "reorder-enabled" : ""}"${reorderAttributes} data-layout-key="${escapeHtml(definition.layout_key)}"><label>${escapeHtml(definition.label)}<span>${escapeHtml(definition.unit || "")}</span></label>${description}<div class="setting-control">${input}<button data-setting-mode="runtime" data-setting-key="${escapeHtml(definition.key)}" ${runtimeDisabled}>Apply</button><button class="reset" data-setting-reset="${escapeHtml(definition.key)}" title="Apply the value currently stored in the printer configuration" ${resetDisabled}>Reset</button><button class="permanent" data-setting-mode="permanent" data-setting-key="${escapeHtml(definition.key)}" ${fileDisabled}>Save to config</button></div>${configured}${unavailable}${historyPanel}</div>`;
+    return `<div class="setting-row ${available ? "" : "setting-row-unavailable"} ${reorderEnabled ? "reorder-enabled" : ""}"${reorderAttributes} data-layout-key="${escapeHtml(definition.layout_key)}">${variableHeader}<div class="setting-control">${input}<button data-setting-mode="runtime" data-setting-key="${escapeHtml(definition.key)}" ${runtimeDisabled}>Apply</button><button class="reset" data-setting-reset="${escapeHtml(definition.key)}" title="Apply the value currently stored in the printer configuration" ${resetDisabled}>Reset</button><button class="permanent" data-setting-mode="permanent" data-setting-key="${escapeHtml(definition.key)}" ${fileDisabled}>Save to config</button></div>${configured}${unavailable}${historyPanel}</div>`;
   };
   const groupDescriptions = {
     "Cleaning and priming": "Shared machine positions used by every tool during priming and brush moves.",
@@ -650,6 +654,19 @@ function renderStats(stats) {
 }
 
 document.addEventListener("click", event => {
+  const settingHelp = event.target.closest("[data-setting-help]");
+  const openHelpRow = settingHelp?.closest(".setting-row");
+  $$(".setting-row.tooltip-open").forEach(row => {
+    if (row !== openHelpRow) {
+      row.classList.remove("tooltip-open");
+      row.querySelector("[data-setting-help]")?.setAttribute("aria-expanded", "false");
+    }
+  });
+  if (settingHelp) {
+    const expanded = openHelpRow.classList.toggle("tooltip-open");
+    settingHelp.setAttribute("aria-expanded", String(expanded));
+    return;
+  }
   const nav = event.target.closest("[data-view]");
   if (nav) return setView(nav.dataset.view);
   const customizeSettings = event.target.closest("[data-customize-settings]");
