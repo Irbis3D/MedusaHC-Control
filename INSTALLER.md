@@ -10,7 +10,7 @@ Update Manager.
 Open an SSH terminal on the printer and run one command:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Irbis3D/MedusaHC-Control/main/install-online.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/Irbis3D/MedusaHC-Control/python-controller/install-online.sh | sudo bash
 ```
 
 The system may request the normal sudo password. This installer downloads the
@@ -65,7 +65,7 @@ read -rsp "GitHub token: " GH_TOKEN; echo
 curl -fsSL \
   -H "Authorization: Bearer $GH_TOKEN" \
   -H "Accept: application/vnd.github.raw+json" \
-  "https://api.github.com/repos/Irbis3D/MedusaHC-Control/contents/install-online.sh?ref=main" \
+  "https://api.github.com/repos/Irbis3D/MedusaHC-Control/contents/install-online.sh?ref=python-controller" \
   | sudo env GH_TOKEN="$GH_TOKEN" bash
 unset GH_TOKEN
 ```
@@ -94,10 +94,10 @@ The public one-command equivalents are:
 
 ```bash
 # Update while preserving settings and statistics
-curl -fsSL https://raw.githubusercontent.com/Irbis3D/MedusaHC-Control/main/install-online.sh | sudo bash -s -- update
+curl -fsSL https://raw.githubusercontent.com/Irbis3D/MedusaHC-Control/python-controller/install-online.sh | sudo bash -s -- update
 
 # Remove the application, integration and all dashboard-owned persistent data
-curl -fsSL https://raw.githubusercontent.com/Irbis3D/MedusaHC-Control/main/install-online.sh | sudo bash -s -- uninstall --purge
+curl -fsSL https://raw.githubusercontent.com/Irbis3D/MedusaHC-Control/python-controller/install-online.sh | sudo bash -s -- uninstall --purge
 ```
 
 ## Files owned by the installer

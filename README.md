@@ -93,7 +93,7 @@ using paths tied to the `biqu` user.
 Open an SSH terminal on the printer and run:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Irbis3D/MedusaHC-Control/main/install-online.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/Irbis3D/MedusaHC-Control/python-controller/install-online.sh | sudo bash
 ```
 
 The installer finds the Klipper and `printer_data` directories and creates a
@@ -124,7 +124,7 @@ Control** from the normal Update Manager page in Mainsail.
 The SSH update command is also available:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Irbis3D/MedusaHC-Control/main/install-online.sh | sudo bash -s -- update
+curl -fsSL https://raw.githubusercontent.com/Irbis3D/MedusaHC-Control/python-controller/install-online.sh | sudo bash -s -- update
 ```
 
 Updates keep the panel configuration, statistics, recent setting values and
@@ -135,7 +135,7 @@ installer backups.
 To remove the panel and all data created by it:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Irbis3D/MedusaHC-Control/main/install-online.sh | sudo bash -s -- uninstall --purge
+curl -fsSL https://raw.githubusercontent.com/Irbis3D/MedusaHC-Control/python-controller/install-online.sh | sudo bash -s -- uninstall --purge
 ```
 
 The uninstaller removes the service, application files and installer-managed
