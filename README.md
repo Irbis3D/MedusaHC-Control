@@ -10,6 +10,8 @@ MedusaHC Control is part of the [MedusaHC project](https://github.com/Irbis3D/Me
 
 ## Support the project
 
+https://irbis3d.xyz/
+
 If this project is useful to you, you can support its continued development
 through [Patreon](https://patreon.com/Irbis3D), make a one-time contribution at
 [Buy Me a Coffee](https://buymeacoffee.com/Irbis3D), or use YouTube Super Thanks
