@@ -245,16 +245,23 @@ button:hover:not(:disabled) { background: #424242; }
 .settings-group-heading p { max-width: 520px; margin: 0; color: var(--muted); font-size: 10px; line-height: 1.4; text-align: right; }
 .settings-group-setup .settings-group-heading { border-left: 3px solid rgba(255,152,0,.65); }
 .settings-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(250px,1fr)); align-items: start; gap: 8px; padding: 12px; }
-.setting-row { align-self: start; padding: 11px; border-radius: 3px; background: #252525; }
+.setting-row { position: relative; align-self: start; padding: 11px; border-radius: 3px; background: #252525; }
 .setting-row-unavailable { background: #202020; }
-.setting-row label { display: flex; justify-content: space-between; gap: 10px; margin-bottom: 7px; font-family: Consolas,"Courier New",monospace; font-size: 11px; }
-.setting-row label span { color: var(--muted); font-size: 9px; }
-.setting-description { margin: -1px 0 8px; color: var(--muted); font-size: 9px; line-height: 1.45; }
+.setting-variable-header { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 7px; font-family: Consolas,"Courier New",monospace; font-size: 11px; }
+.setting-variable-name { min-width: 0; overflow-wrap: anywhere; }
+.setting-unit { flex: 0 0 auto; color: var(--muted); font-size: 9px; }
+.setting-variable-help { min-width: 0; display: inline-flex; align-items: center; gap: 6px; border: 0; padding: 0; background: transparent; color: var(--text); font: inherit; text-align: left; cursor: help; }
+.setting-variable-help > span:first-child { min-width: 0; overflow-wrap: anywhere; }
+.setting-help-mark { width: 15px; height: 15px; flex: 0 0 15px; display: inline-grid; place-items: center; border: 1px solid rgba(144,202,249,.45); border-radius: 50%; color: #90caf9; font-family: sans-serif; font-size: 9px; }
+.setting-tooltip { position: absolute; z-index: 12; top: calc(100% + 6px); left: 0; width: min(300px,calc(100vw - 48px)); padding: 8px 10px; border: 1px solid rgba(144,202,249,.3); border-radius: 4px; background: #111; box-shadow: 0 8px 24px rgba(0,0,0,.5); color: #d5d5d5; font-family: Arial,sans-serif; font-size: 10px; line-height: 1.45; pointer-events: none; opacity: 0; visibility: hidden; transform: translateY(-3px); transition: opacity .12s ease,transform .12s ease,visibility .12s; }
+.setting-variable-help:hover ~ .setting-tooltip, .setting-variable-help:focus-visible ~ .setting-tooltip, .setting-row.tooltip-open .setting-tooltip { opacity: 1; visibility: visible; transform: translateY(0); }
 .setting-unavailable { display: grid; gap: 3px; margin: 8px 0 0; color: var(--muted); font-size: 9px; line-height: 1.35; }
 .setting-unavailable strong { color: #ef9a9a; font-weight: 500; }
 .setting-unavailable span { overflow-wrap: anywhere; }
 .setting-row-unavailable .setting-control { opacity: .55; }
 .setting-control { display: grid; grid-template-columns: minmax(72px,1fr) auto auto auto; gap: 6px; }
+.tool-settings-group .setting-control { grid-template-columns: repeat(3,minmax(0,1fr)); }
+.tool-settings-group .setting-control input, .tool-settings-group .setting-control select { grid-column: 1/-1; min-height: 38px; font-size: 13px; }
 .setting-control button { border: 0; border-radius: 3px; background: #3a3a3a; padding: 0 9px; font-size: 9px; }
 .setting-control button.save { background: var(--blue-dark); color: #fff; }
 .setting-control button.permanent { border: 1px solid rgba(255,152,0,.55); background: transparent; color: #ffb74d; }
