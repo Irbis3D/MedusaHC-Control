@@ -347,7 +347,7 @@ def uninstall_mainsail() -> None:
 
 def core_install() -> None:
     require_root()
-    subprocess.run([str(ROOT / "install.sh"), "install"], check=True)
+    subprocess.run(["bash", str(ROOT / "install.sh"), "install"], check=True)
 
 
 def core_uninstall(purge: bool = False) -> None:
@@ -355,7 +355,7 @@ def core_uninstall(purge: bool = False) -> None:
     manifest = load_manifest()
     if manifest.get("mainsail", {}).get("installed"):
         fail("Remove MedusaHC Mainsail before removing MedusaHC Control")
-    command = [str(ROOT / "install.sh"), "uninstall"]
+    command = ["bash", str(ROOT / "install.sh"), "uninstall"]
     if purge:
         command.append("--purge")
     subprocess.run(command, check=True)
