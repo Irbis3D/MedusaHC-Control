@@ -11,6 +11,7 @@ import tarfile
 import tempfile
 import time
 import zipfile
+import urllib.request
 from pathlib import Path
 
 try:
@@ -18,7 +19,10 @@ try:
 except ImportError:  # Allows local Windows syntax/help checks; installation is Linux-only.
     pwd = None
 
-from config_edit import plan_install, plan_remove
+try:
+    from .config_edit import plan_install, plan_remove
+except ImportError:
+    from config_edit import plan_install, plan_remove
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -26,6 +30,7 @@ STATE = Path(os.environ.get("MEDUSAHC_INSTALLER_STATE", "/var/lib/medusahc-insta
 MANIFEST = STATE / "manifest.json"
 REPOSITORY = "Irbis3D/MedusaHC-Mainsail"
 PARALLEL_PORT = 81
+RELEASE_ASSET = "medusahc-mainsail.zip"
 
 
 def fail(message: str) -> None:
@@ -111,6 +116,38 @@ def confirm_moonraker(plan, path: Path) -> None:
 def validate_target(target: Path, expected: Path) -> None:
     if target.resolve(strict=False) != expected.resolve(strict=False):
         fail(f"Refusing unexpected Mainsail target: {target}")
+
+
+def release_asset_url(release: dict) -> tuple[str, str]:
+    tag = str(release.get("tag_name", "")).strip()
+    for asset in release.get("assets", []):
+        if asset.get("name") == RELEASE_ASSET and asset.get("browser_download_url"):
+            return str(asset["browser_download_url"]), tag
+    fail(f"Latest {REPOSITORY} release does not contain {RELEASE_ASSET}")
+
+
+def download_mainsail_release(destination: Path) -> str:
+    api = f"https://api.github.com/repos/{REPOSITORY}/releases/latest"
+    request = urllib.request.Request(api, headers={"Accept": "application/vnd.github+json"})
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            release = json.load(response)
+        url, tag = release_asset_url(release)
+        with urllib.request.urlopen(url, timeout=120) as response, destination.open("wb") as stream:
+            shutil.copyfileobj(response, stream)
+    except Exception as error:
+        fail(f"Cannot download the latest MedusaHC Mainsail release: {error}")
+    if not zipfile.is_zipfile(destination):
+        fail("Downloaded MedusaHC Mainsail asset is not a valid ZIP archive")
+    print(f"Downloaded MedusaHC Mainsail {tag or 'release'}.")
+    return tag
+
+
+def install_latest_mainsail(mode: str) -> None:
+    with tempfile.TemporaryDirectory(prefix="medusahc-release-") as temporary:
+        archive = Path(temporary) / RELEASE_ASSET
+        download_mainsail_release(archive)
+        install_mainsail(mode, archive)
 
 
 def backup(paths_: dict[str, Path], target: Path, mode: str) -> Path:
@@ -348,8 +385,7 @@ MedusaHC Manager
         if choice == "1":
             core_install()
         elif choice in {"2", "3"}:
-            archive = Path(input("Path to medusahc-mainsail.zip: ").strip())
-            install_mainsail("replace" if choice == "2" else "parallel", archive)
+            install_latest_mainsail("replace" if choice == "2" else "parallel")
         elif choice == "4":
             status()
         elif choice == "5":
@@ -368,7 +404,7 @@ def main() -> None:
     sub.add_parser("status")
     install = sub.add_parser("install-mainsail")
     install.add_argument("--mode", required=True, choices=("replace", "parallel"))
-    install.add_argument("--archive", required=True, type=Path)
+    install.add_argument("--archive", type=Path)
     sub.add_parser("uninstall-mainsail")
     args = parser.parse_args()
     if args.action is None:
@@ -376,7 +412,10 @@ def main() -> None:
     elif args.action == "status":
         status()
     elif args.action == "install-mainsail":
-        install_mainsail(args.mode, args.archive)
+        if args.archive:
+            install_mainsail(args.mode, args.archive)
+        else:
+            install_latest_mainsail(args.mode)
     elif args.action == "uninstall-mainsail":
         uninstall_mainsail()
 

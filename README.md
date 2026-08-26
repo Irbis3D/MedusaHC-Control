@@ -90,7 +90,18 @@ using paths tied to the `biqu` user.
 
 ## Install
 
-Open an SSH terminal on the printer and run:
+For the full installation menu, open an SSH terminal on the printer and run:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Irbis3D/MedusaHC-Control/python-controller/install-manager.sh | bash
+```
+
+The menu can install the standalone panel, replace the main Mainsail with
+MedusaHC Mainsail, or install MedusaHC Mainsail in parallel. It downloads the
+latest tested Mainsail release automatically. Before every Moonraker change it
+prints the exact diff and asks for separate approval.
+
+To install only the standalone control panel, use:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Irbis3D/MedusaHC-Control/python-controller/install-online.sh | sudo bash
