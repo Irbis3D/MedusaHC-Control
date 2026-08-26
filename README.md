@@ -93,7 +93,7 @@ using paths tied to the `biqu` user.
 For the full installation menu, open an SSH terminal on the printer and run:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Irbis3D/MedusaHC-Control/python-controller/install-manager.sh | bash
+curl -fsSL -H 'Cache-Control: no-cache' https://raw.githubusercontent.com/Irbis3D/MedusaHC-Control/python-controller/install-manager.sh | bash
 ```
 
 The menu can install the standalone panel, replace the main Mainsail with
