@@ -96,10 +96,11 @@ For the full installation menu, open an SSH terminal on the printer and run:
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/Irbis3D/MedusaHC-Control/python-controller/install-manager.sh)"
 ```
 
-The menu can install the standalone panel, replace the main Mainsail with
-MedusaHC Mainsail, or install MedusaHC Mainsail in parallel. It downloads the
-latest tested Mainsail release automatically. Before every Moonraker change it
-prints the exact diff and asks for separate approval.
+The menu manages only the optional MedusaHC Mainsail integration: it can
+replace the main Mainsail, install the modified Mainsail in parallel, show its
+status, or remove it and restore the previous Mainsail. It never installs,
+updates, or removes MedusaHC Control. Before every Moonraker change it prints
+the exact diff and asks for separate approval.
 
 To install only the standalone control panel, use:
 

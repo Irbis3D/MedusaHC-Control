@@ -345,23 +345,6 @@ def uninstall_mainsail() -> None:
     print("MedusaHC Mainsail removed and the previous state restored.")
 
 
-def core_install() -> None:
-    require_root()
-    action = "update" if (paths()["home"] / "medusahc-control").is_dir() else "install"
-    subprocess.run(["bash", str(ROOT / "install.sh"), action], check=True)
-
-
-def core_uninstall(purge: bool = False) -> None:
-    require_root()
-    manifest = load_manifest()
-    if manifest.get("mainsail", {}).get("installed"):
-        fail("Remove MedusaHC Mainsail before removing MedusaHC Control")
-    command = ["bash", str(ROOT / "install.sh"), "uninstall"]
-    if purge:
-        command.append("--purge")
-    subprocess.run(command, check=True)
-
-
 def status() -> None:
     p = paths()
     manifest = load_manifest()
@@ -374,26 +357,22 @@ def menu() -> None:
     while True:
         print("""
 MedusaHC Manager
-1) Install MedusaHC Control
-2) Replace main Mainsail with MedusaHC Mainsail
-3) Install MedusaHC Mainsail in parallel
-4) Status
-5) Remove MedusaHC Mainsail
-6) Remove MedusaHC Control (keep data)
-7) Exit
+1) Replace main Mainsail with MedusaHC Mainsail
+2) Install MedusaHC Mainsail in parallel
+3) Status
+4) Remove MedusaHC Mainsail and restore the previous Mainsail
+5) Exit
 """)
         choice = input("Select: ").strip()
         if choice == "1":
-            core_install()
-        elif choice in {"2", "3"}:
-            install_latest_mainsail("replace" if choice == "2" else "parallel")
-        elif choice == "4":
+            install_latest_mainsail("replace")
+        elif choice == "2":
+            install_latest_mainsail("parallel")
+        elif choice == "3":
             status()
-        elif choice == "5":
+        elif choice == "4":
             uninstall_mainsail()
-        elif choice == "6":
-            core_uninstall()
-        elif choice == "7":
+        elif choice == "5":
             return
         else:
             print("Unknown selection.")

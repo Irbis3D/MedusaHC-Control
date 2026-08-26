@@ -5,14 +5,14 @@ components. It does not download or publish anything by itself.
 
 ## Installation layouts
 
-1. **MedusaHC Control only** keeps the independent interface on port 8090.
-2. **Replace Mainsail** backs up the current Mainsail directory, installs the
+1. **Replace Mainsail** backs up the current Mainsail directory, installs the
    prepared MedusaHC Mainsail distribution in its place, and replaces the
    standard Mainsail updater entry with the MedusaHC updater entry.
-3. **Parallel Mainsail** keeps the existing Mainsail untouched, installs into
+2. **Parallel Mainsail** keeps the existing Mainsail untouched, installs into
    `~/mainsail-medusahc`, and creates a dedicated nginx site on port 81.
 
-The Mainsail modes require MedusaHC Control to be installed because their tab
+The manager does not install or remove MedusaHC Control. Both Mainsail modes
+require it to be installed separately because their tab
 opens the same service running on port 8090. The service therefore remains
 usable directly if Mainsail is unavailable.
 
