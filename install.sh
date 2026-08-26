@@ -448,8 +448,15 @@ install_application() {
     if [[ -n "$(runuser -u "${install_user}" -- git -C "${APP_DIR}" status --porcelain)" ]]; then
       die "The application repository contains local changes. Commit or remove them before updating."
     fi
-    runuser -u "${install_user}" -- git -C "${APP_DIR}" fetch origin "${PRIMARY_BRANCH}"
-    runuser -u "${install_user}" -- git -C "${APP_DIR}" checkout "${PRIMARY_BRANCH}"
+    runuser -u "${install_user}" -- git -C "${APP_DIR}" fetch origin \
+      "+refs/heads/${PRIMARY_BRANCH}:refs/remotes/origin/${PRIMARY_BRANCH}"
+    if runuser -u "${install_user}" -- git -C "${APP_DIR}" show-ref --verify --quiet \
+        "refs/heads/${PRIMARY_BRANCH}"; then
+      runuser -u "${install_user}" -- git -C "${APP_DIR}" checkout "${PRIMARY_BRANCH}"
+    else
+      runuser -u "${install_user}" -- git -C "${APP_DIR}" checkout -b "${PRIMARY_BRANCH}" \
+        --track "origin/${PRIMARY_BRANCH}"
+    fi
     runuser -u "${install_user}" -- git -C "${APP_DIR}" merge --ff-only "origin/${PRIMARY_BRANCH}"
   else
     rm -rf -- "${replacement_dir}"
@@ -627,10 +634,10 @@ install_or_update() {
   log "Klipper: ${klipper_dir}"
   log "Config: ${config_dir}"
   log "Web interface port: ${port}"
+  install_application
   if [[ "${dry_run}" -eq 0 ]]; then
     systemctl stop "${APP_NAME}.service" >/dev/null 2>&1 || true
   fi
-  install_application
   backup_integration
   install_adapter
   install_moonraker_update_manager

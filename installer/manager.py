@@ -347,7 +347,8 @@ def uninstall_mainsail() -> None:
 
 def core_install() -> None:
     require_root()
-    subprocess.run(["bash", str(ROOT / "install.sh"), "install"], check=True)
+    action = "update" if (paths()["home"] / "medusahc-control").is_dir() else "install"
+    subprocess.run(["bash", str(ROOT / "install.sh"), action], check=True)
 
 
 def core_uninstall(purge: bool = False) -> None:
