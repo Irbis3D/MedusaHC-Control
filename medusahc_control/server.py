@@ -16,6 +16,7 @@ from .service import ControlService, SafetyError
 
 LOG = logging.getLogger(__name__)
 WEB_ROOT = (Path(__file__).parent / "web").resolve()
+WEB_PREFIX = "/medusahc"
 
 
 class MedusaHTTPServer(ThreadingHTTPServer):
@@ -40,7 +41,7 @@ class RequestHandler(BaseHTTPRequestHandler):
         super().end_headers()
 
     def do_GET(self) -> None:
-        path = urlparse(self.path).path
+        path = self._application_path()
         if path == "/api/health":
             state = self.server.service.state()
             self._json({"ok": True, "connected": state.get("connected"), "simulated": state.get("simulated")})
@@ -60,7 +61,7 @@ class RequestHandler(BaseHTTPRequestHandler):
         self._static(path)
 
     def do_POST(self) -> None:
-        path = urlparse(self.path).path
+        path = self._application_path()
         try:
             self._require_token()
             payload = self._read_json()
@@ -99,6 +100,14 @@ class RequestHandler(BaseHTTPRequestHandler):
         except Exception as exc:
             LOG.exception("Request failed")
             self._json({"error": f"Internal service error: {exc}"}, HTTPStatus.INTERNAL_SERVER_ERROR)
+
+    def _application_path(self) -> str:
+        path = urlparse(self.path).path
+        if path == WEB_PREFIX:
+            return "/"
+        if path.startswith(WEB_PREFIX + "/"):
+            return path[len(WEB_PREFIX):]
+        return path
 
     def _require_token(self) -> None:
         expected = self.server.config.control_token

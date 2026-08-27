@@ -21,11 +21,12 @@ const app = {
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, char => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[char]));
+const apiBase = window.location.pathname.startsWith("/medusahc/") ? "/medusahc" : "";
 
 async function api(path, options = {}) {
   const headers = {"Content-Type": "application/json", ...(options.headers || {})};
   if (app.token) headers["X-Medusa-Token"] = app.token;
-  const response = await fetch(path, {...options, headers});
+  const response = await fetch(`${apiBase}${path}`, {...options, headers});
   const body = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(body.error || `Request failed (${response.status})`);
   return body;
