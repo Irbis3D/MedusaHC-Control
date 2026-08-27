@@ -58,6 +58,8 @@ def paths() -> dict[str, Path]:
     home = Path(user.pw_dir)
     return {
         "home": home,
+        "uid": user.pw_uid,
+        "gid": user.pw_gid,
         "moonraker": home / "printer_data/config/moonraker.conf",
         "standard": home / "mainsail",
         "parallel": home / "mainsail-medusahc",
@@ -183,7 +185,16 @@ def unpack_archive(archive: Path, destination: Path) -> Path:
     return root
 
 
-def install_tree(archive: Path, target: Path) -> None:
+def chown_tree(path: Path, uid: int, gid: int) -> None:
+    os.chown(path, uid, gid)
+    for root, directories, files in os.walk(path):
+        for name in directories:
+            os.chown(Path(root) / name, uid, gid)
+        for name in files:
+            os.chown(Path(root) / name, uid, gid)
+
+
+def install_tree(archive: Path, target: Path, uid: int, gid: int) -> None:
     parent = target.parent
     parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="medusahc-install-", dir=parent) as temporary:
@@ -195,6 +206,7 @@ def install_tree(archive: Path, target: Path) -> None:
         if target.exists():
             shutil.rmtree(target)
         replacement.replace(target)
+        chown_tree(target, uid, gid)
 
 
 def panel_port() -> int:
@@ -325,7 +337,7 @@ def install_mainsail(mode: str, archive: Path) -> None:
     backup_dir = backup(p, target, mode)
     moonraker_changed = False
     try:
-        install_tree(archive.resolve(), target)
+        install_tree(archive.resolve(), target, p["uid"], p["gid"])
         if mode == "parallel":
             write_nginx_parallel(target, p["nginx_available"], p["nginx_enabled"], port)
         else:
