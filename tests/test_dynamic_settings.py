@@ -347,6 +347,17 @@ class LayoutDatabaseTests(unittest.TestCase):
                     {item["layout_key"] for item in customized["schema"] if item["visible"]},
                     {"tool:prime_amount"},
                 )
+                with urlopen(f"{base_url}/medusahc/", timeout=3) as response:
+                    html = response.read().decode("utf-8")
+                self.assertIn('href="styles.css"', html)
+                with urlopen(f"{base_url}/medusahc/styles.css", timeout=3) as response:
+                    self.assertEqual(response.status, 200)
+                with urlopen(f"{base_url}/medusahc/api/settings", timeout=3) as response:
+                    prefixed = json.load(response)
+                self.assertEqual(
+                    {item["layout_key"] for item in prefixed["schema"] if item["visible"]},
+                    {"tool:prime_amount"},
+                )
             finally:
                 server.shutdown()
                 server.server_close()

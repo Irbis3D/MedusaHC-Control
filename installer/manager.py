@@ -31,6 +31,9 @@ MANIFEST = STATE / "manifest.json"
 REPOSITORY = "Irbis3D/MedusaHC-Mainsail"
 PARALLEL_PORT = 81
 RELEASE_ASSET = "medusahc-mainsail.zip"
+PANEL_CONFIG = Path("/var/lib/medusahc-control/config.json")
+NGINX_BEGIN = "    # >>> MEDUSAHC PANEL PROXY >>>"
+NGINX_END = "    # <<< MEDUSAHC PANEL PROXY <<<"
 
 
 def fail(message: str) -> None:
@@ -60,6 +63,7 @@ def paths() -> dict[str, Path]:
         "parallel": home / "mainsail-medusahc",
         "nginx_available": Path("/etc/nginx/sites-available/medusahc-mainsail"),
         "nginx_enabled": Path("/etc/nginx/sites-enabled/medusahc-mainsail"),
+        "nginx_main": Path("/etc/nginx/sites-available/mainsail"),
     }
 
 
@@ -158,6 +162,8 @@ def backup(paths_: dict[str, Path], target: Path, mode: str) -> Path:
         with tarfile.open(directory / "mainsail.tar.gz", "w:gz") as archive:
             archive.add(target, arcname="mainsail", recursive=True)
     shutil.copy2(paths_["moonraker"], directory / "moonraker.conf")
+    if mode == "replace" and paths_["nginx_main"].is_file():
+        shutil.copy2(paths_["nginx_main"], directory / "mainsail.nginx.conf")
     return directory
 
 
@@ -191,7 +197,74 @@ def install_tree(archive: Path, target: Path) -> None:
         replacement.replace(target)
 
 
-def write_nginx_parallel(target: Path, available: Path, enabled: Path) -> None:
+def panel_port() -> int:
+    try:
+        value = int(json.loads(PANEL_CONFIG.read_text(encoding="utf-8")).get("port", 8090))
+    except (OSError, ValueError, TypeError, json.JSONDecodeError) as error:
+        fail(f"Cannot read MedusaHC Control port from {PANEL_CONFIG}: {error}")
+    if not 1 <= value <= 65535:
+        fail(f"Invalid MedusaHC Control port in {PANEL_CONFIG}: {value}")
+    return value
+
+
+def panel_proxy_block(port: int) -> str:
+    return f"""{NGINX_BEGIN}
+    location = /medusahc {{ return 301 /medusahc/; }}
+    location /medusahc/ {{
+        proxy_pass http://127.0.0.1:{port};
+        proxy_http_version 1.1;
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }}
+{NGINX_END}
+"""
+
+
+def add_panel_proxy(config: str, port: int) -> str:
+    if NGINX_BEGIN in config or NGINX_END in config:
+        if config.count(NGINX_BEGIN) != 1 or config.count(NGINX_END) != 1:
+            fail("Mainsail nginx configuration contains malformed MedusaHC proxy markers")
+        return config
+    closing = config.rfind("}")
+    if closing < 0:
+        fail("Mainsail nginx configuration does not contain a server closing brace")
+    return config[:closing].rstrip() + "\n\n" + panel_proxy_block(port) + config[closing:]
+
+
+def remove_panel_proxy(config: str) -> str:
+    if NGINX_BEGIN not in config and NGINX_END not in config:
+        return config
+    if config.count(NGINX_BEGIN) != 1 or config.count(NGINX_END) != 1:
+        fail("Mainsail nginx configuration contains malformed MedusaHC proxy markers")
+    start = config.index(NGINX_BEGIN)
+    end = config.index(NGINX_END, start) + len(NGINX_END)
+    return config[:start].rstrip() + "\n" + config[end:].lstrip("\r\n")
+
+
+def write_main_nginx_proxy(path: Path, port: int) -> None:
+    if not path.is_file():
+        fail(f"Primary Mainsail nginx configuration not found: {path}")
+    updated = add_panel_proxy(path.read_text(encoding="utf-8"), port)
+    atomic_write(path, updated)
+    subprocess.run(["nginx", "-t"], check=True)
+    subprocess.run(["systemctl", "reload", "nginx"], check=True)
+
+
+def remove_main_nginx_proxy(path: Path, *, reload: bool = True) -> None:
+    if not path.is_file():
+        fail(f"Primary Mainsail nginx configuration not found: {path}")
+    original = path.read_text(encoding="utf-8")
+    updated = remove_panel_proxy(original)
+    if updated != original:
+        atomic_write(path, updated)
+    if reload:
+        subprocess.run(["nginx", "-t"], check=True)
+        subprocess.run(["systemctl", "reload", "nginx"], check=True)
+
+
+def write_nginx_parallel(target: Path, available: Path, enabled: Path, port: int) -> None:
     config = f"""# Managed by MedusaHC Manager
 server {{
     listen {PARALLEL_PORT};
@@ -208,6 +281,7 @@ server {{
     location ~ ^/(printer|api|access|machine|server)/ {{
         proxy_pass http://127.0.0.1:7125;
     }}
+{panel_proxy_block(port)}
 }}
 """
     if available.exists() and available.read_text(encoding="utf-8") != config:
@@ -237,6 +311,7 @@ def install_mainsail(mode: str, archive: Path) -> None:
     if not p["moonraker"].is_file():
         fail(f"moonraker.conf not found: {p['moonraker']}")
     target = p["standard"] if mode == "replace" else p["parallel"]
+    port = panel_port()
     validate_target(target, p["standard"] if mode == "replace" else p["parallel"])
     moonraker_text = p["moonraker"].read_text(encoding="utf-8")
     plan = plan_install(moonraker_text, mode=mode, path=str(target), repository=REPOSITORY)
@@ -252,13 +327,17 @@ def install_mainsail(mode: str, archive: Path) -> None:
     try:
         install_tree(archive.resolve(), target)
         if mode == "parallel":
-            write_nginx_parallel(target, p["nginx_available"], p["nginx_enabled"])
+            write_nginx_parallel(target, p["nginx_available"], p["nginx_enabled"], port)
+        else:
+            write_main_nginx_proxy(p["nginx_main"], port)
         atomic_write(p["moonraker"], plan.updated)
         moonraker_changed = True
         subprocess.run(["systemctl", "restart", "moonraker"], check=True)
     except Exception:
         if mode == "parallel":
             remove_parallel_nginx(p, reload=False)
+        else:
+            remove_main_nginx_proxy(p["nginx_main"], reload=False)
         restore_tree(backup_dir, target)
         if moonraker_changed:
             atomic_write(p["moonraker"], (backup_dir / "moonraker.conf").read_text(encoding="utf-8"))
@@ -273,6 +352,7 @@ def install_mainsail(mode: str, archive: Path) -> None:
         "backup": str(backup_dir),
         "standard_updater": plan.removed_standard_updater,
         "parallel_port": PARALLEL_PORT if mode == "parallel" else None,
+        "panel_port": port,
     }
     manifest.setdefault("backups", []).append(str(backup_dir))
     save_manifest(manifest)
@@ -337,6 +417,8 @@ def uninstall_mainsail() -> None:
         fail("Removal cancelled")
     if mode == "parallel":
         remove_parallel_nginx(p)
+    else:
+        remove_main_nginx_proxy(p["nginx_main"])
     restore_tree(Path(item["backup"]), target)
     atomic_write(p["moonraker"], plan.updated)
     subprocess.run(["systemctl", "restart", "moonraker"], check=True)
