@@ -185,16 +185,22 @@
         <div class="section-intro"><div><p class="eyebrow">CALIBRATION FUNCTIONS</p><h2>Calibration</h2></div><p>Each button independently calls the corresponding calibration function configured in Klipper.</p></div>
         <div class="calibration-grid">
           <article class="calibration-card">
-            <span class="cal-command">CALIBRATE_AND_SAVE_OFFSETS</span>
-            <h3>XYZ tool calibration</h3>
-            <p>Runs the configured SexBall, Nudge or compatible klipper-toolchanger XYZ offset calibration.</p>
-            <button data-action="calibrate_xyz">Run XYZ calibration</button>
+            <span class="cal-command">CALIBRATE_XYZ_TOUCH</span>
+            <h3>Contact XYZ calibration</h3>
+            <p>Calibrates all tool offsets with the configured contact sensor. Legacy installations use their compatible XYZ command automatically.</p>
+            <button data-action="calibrate_xyz_touch">Run contact calibration</button>
           </article>
           <article class="calibration-card">
-            <span class="cal-command">TOOL_Z_CALIBRATION</span>
-            <h3>Tool Z calibration</h3>
-            <p>Calibrates only tool Z offsets through the configured Klipper tap probe.</p>
-            <button data-action="calibrate_z">Run Z calibration</button>
+            <span class="cal-command">CALIBRATE_XYZ_EDDY</span>
+            <h3>Eddy XYZ calibration</h3>
+            <p>Uses native Eddy Tap for Z and the configured stationary EddySeek sensor for XY.</p>
+            <button data-action="calibrate_xyz_eddy">Run Eddy XYZ calibration</button>
+          </article>
+          <article class="calibration-card">
+            <span class="cal-command">CALIBRATE_Z_EDDY</span>
+            <h3>Eddy Z calibration</h3>
+            <p>Calibrates tool Z offsets through native Klipper Eddy Tap. Legacy installations use their compatible Z command automatically.</p>
+            <button data-action="calibrate_z_eddy">Run Eddy Z calibration</button>
           </article>
           <article class="calibration-card">
             <span class="cal-command">Z_TILT_ADJUST</span>

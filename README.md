@@ -18,25 +18,6 @@ through [Patreon](https://patreon.com/Irbis3D), make a one-time contribution at
 on the [Irbis3D channel](https://youtube.com/@Irbis3D). Support helps fund parts,
 testing hardware and the time needed to maintain the project.
 
-## Two editions during the Python transition
-
-MedusaHC is currently transitioning from the original macro-based tool-change
-controller to the new Python controller. During this transition, two editions
-of MedusaHC Control are maintained and published side by side:
-
-- **Macro edition** — for printers still using the original MedusaHC macros.
-- **Python edition** — for printers using
-  [MedusaHC-Python-Controller](https://github.com/Irbis3D/MedusaHC-Python-Controller).
-
-Choose the panel edition that matches the controller already installed on the
-printer. The panel installer does not install, replace or convert the MedusaHC
-controller. Both editions are available on the
-[Releases page](https://github.com/Irbis3D/MedusaHC-Control/releases).
-
-The Macro edition is a temporary compatibility release. Once the transition to
-the Python controller is complete, the Macro edition will be retired and the
-Python edition will become the only actively maintained version.
-
 > [!WARNING]
 > This project is experimental and is not yet intended for unattended use. It
 > was created with extensive AI assistance ("vibe coding") and has not been
@@ -50,12 +31,19 @@ Python edition will become the only actively maintained version.
 This is an early working prototype. It has been tested on a DuCR10 with six
 rear-mounted MedusaHC tools, but the interface itself is not limited to six
 tools. It reads the configured tool count from
+`_GLOBAL_STATE.variable_max_tool` or the legacy
 `GLOBAL_STATE.variable_max_tool` each time it starts and creates the required
 tool cards and settings automatically.
 
 Support for different printers and MedusaHC layouts is still being developed.
 The panel expects an already installed and working MedusaHC configuration. It
 does not yet provide the complete setup wizard planned for future versions.
+
+There is one MedusaHC Control edition. It supports the current Python-based
+controller and remains backward compatible with the frozen macro controller.
+Hidden configuration macros are detected automatically; users do not need to
+rename existing sections. The panel never installs, replaces, or removes the
+controller, `MHC_macros.cfg`, or `MHC_variables.cfg`.
 
 ## What it can do
 
@@ -97,7 +85,7 @@ printer backup.
 
 - An existing Linux Klipper installation with Moonraker and MedusaHC.
 - Python 3.9 or newer.
-- A working `GLOBAL_STATE` MedusaHC macro.
+- A working `_GLOBAL_STATE` or legacy `GLOBAL_STATE` MedusaHC macro.
 - SSH access with `sudo` permission for installation.
 
 The installer detects common CB2 and Raspberry Pi installations instead of
@@ -105,7 +93,19 @@ using paths tied to the `biqu` user.
 
 ## Install
 
-Open an SSH terminal on the printer and run:
+For the full installation menu, open an SSH terminal on the printer and run:
+
+```bash
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/Irbis3D/MedusaHC-Control/main/install-manager.sh)"
+```
+
+The menu manages only the optional MedusaHC Mainsail integration: it can
+replace the main Mainsail, install the modified Mainsail in parallel, show its
+status, or remove it and restore the previous Mainsail. It never installs,
+updates, or removes MedusaHC Control. Before every Moonraker change it prints
+the exact diff and asks for separate approval.
+
+To install only the standalone control panel, use:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Irbis3D/MedusaHC-Control/main/install-online.sh | sudo bash

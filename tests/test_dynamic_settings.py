@@ -13,6 +13,7 @@ from medusahc_control.database import StatsDatabase
 from medusahc_control.service import ControlService
 from medusahc_control.server import MedusaHTTPServer
 from medusahc_control.settings import inspect_variable_config, schema_for
+from medusahc_control.state import normalize_status
 
 
 CURRENT_CONFIG = """
@@ -20,6 +21,8 @@ CURRENT_CONFIG = """
 # Safe rack clearance.
 variable_y_safe: 330
 variable_x_t0: 45
+variable_servo_open_angle: 180
+variable_servo_close_angle: 0
 
 [gcode_macro TOOL_STATE_0]
 # Extrusion before printing.
@@ -71,6 +74,38 @@ variable_prime_amount: 13
 
 
 class VariableInspectionTests(unittest.TestCase):
+    def test_hidden_macro_sections_keep_canonical_panel_names(self) -> None:
+        hidden = """
+[gcode_macro _TOOL_CFG]
+variable_y_safe: 321
+[gcode_macro _GLOBAL_STATE]
+variable_max_tool: 1
+[gcode_macro _TOOL_STATE_0]
+variable_prime_amount: 17
+[gcode_macro _TOOL_OFFSET]
+variable_t0_off_x: 0.125
+"""
+        discovered = inspect_variable_config(hidden)
+        self.assertEqual(discovered[("TOOL_CFG", "y_safe")]["source_macro"], "_TOOL_CFG")
+        schema = schema_for(1, discovered)
+        by_key = {item["key"]: item for item in schema}
+        self.assertTrue(by_key["y_safe"]["available"])
+        self.assertEqual(by_key["y_safe"]["source_macro"], "_TOOL_CFG")
+        self.assertEqual(by_key["t0_offset_x"]["source_macro"], "_TOOL_OFFSET")
+
+    def test_permanent_write_uses_hidden_source_section(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "MHC_variables.cfg"
+            path.write_text("[gcode_macro _TOOL_CFG]\nvariable_y_safe: 300\n", encoding="utf-8")
+            store = ConfigStore(str(path), Path(directory) / "backups")
+            metadata = store.inspect_variables()[("TOOL_CFG", "y_safe")]
+            store.save_permanent({
+                "macro": "TOOL_CFG",
+                "source_macro": metadata["source_macro"],
+                "variable": "y_safe",
+            }, 315)
+            self.assertIn("variable_y_safe: 315", path.read_text(encoding="utf-8"))
+
     def test_direct_comments_are_descriptions(self) -> None:
         discovered = inspect_variable_config(CURRENT_CONFIG)
         self.assertEqual(discovered[("TOOL_CFG", "y_safe")]["description"], "Safe rack clearance.")
@@ -83,6 +118,9 @@ class VariableInspectionTests(unittest.TestCase):
         self.assertTrue(by_key["t0_prime_amount"]["available"])
         self.assertEqual(by_key["t0_prime_amount"]["configured_value"], 18)
         self.assertEqual(by_key["y_safe"]["configured_value"], 330)
+        self.assertEqual(by_key["servo_open_angle"]["configured_value"], 180)
+        self.assertEqual(by_key["servo_close_angle"]["configured_value"], 0)
+        self.assertEqual(by_key["servo_open_angle"]["group"], "Feeder")
         self.assertEqual(by_key["t0_prime_amount"]["label"], "prime_amount")
         self.assertTrue(by_key["t0_x_clean_move"]["default_visible"])
         self.assertTrue(by_key["t0_ptfe_clean_slow_speed"]["default_visible"])
@@ -125,6 +163,75 @@ class VariableInspectionTests(unittest.TestCase):
 
 
 class LayoutDatabaseTests(unittest.TestCase):
+    def test_hidden_runtime_objects_are_normalized_and_written_by_real_name(self) -> None:
+        status = {
+            "webhooks": {"state": "ready"},
+            "print_stats": {"state": "standby"},
+            "toolhead": {"homed_axes": "xyz", "position": [0, 0, 0, 0]},
+            "pin_watch io": {"current_tool": -1, "tool_count": 1},
+            "gcode_macro _GLOBAL_STATE": {"max_tool": 1},
+            "gcode_macro _TOOL_CFG": {"tools_direction": 1, "y_safe": 300},
+            "gcode_macro _TOOL_OFFSET": {"t0_off_x": 0.1, "t0_off_y": 0, "t0_off_z": 0},
+            "gcode_macro _TOOL_STATE_0": {"prime_amount": 12},
+            "gcode_macro T0": {},
+            "extruder": {},
+        }
+        normalized = normalize_status(status)
+        self.assertEqual(normalized["tool_count"], 1)
+        self.assertEqual(normalized["macro_values"]["TOOL_CFG"]["y_safe"], 300)
+        self.assertEqual(normalized["macro_names"]["TOOL_STATE_0"], "_TOOL_STATE_0")
+        definition = {
+            "macro": "TOOL_CFG", "runtime_macro": "_TOOL_CFG", "variable": "y_safe"
+        }
+        self.assertEqual(
+            ControlService._runtime_command_updates(definition, 310),
+            [("_TOOL_CFG", "y_safe", 310.0)],
+        )
+
+    def test_calibration_commands_support_new_and_legacy_modules(self) -> None:
+        modern = {"available_macros": ["CALIBRATE_XYZ_TOUCH", "CALIBRATE_XYZ_EDDY", "CALIBRATE_Z_EDDY"]}
+        self.assertEqual(ControlService._gcode("calibrate_xyz_touch", {}, modern), "CALIBRATE_XYZ_TOUCH")
+        self.assertEqual(ControlService._gcode("calibrate_xyz_eddy", {}, modern), "CALIBRATE_XYZ_EDDY")
+        self.assertEqual(ControlService._gcode("calibrate_z_eddy", {}, modern), "CALIBRATE_Z_EDDY")
+        self.assertEqual(ControlService._gcode("calibrate_xyz_touch", {}, {}), "CALIBRATE_AND_SAVE_OFFSETS")
+        self.assertEqual(ControlService._gcode("calibrate_z_eddy", {}, {}), "TOOL_Z_CALIBRATION")
+
+    def test_stats_ignore_transient_sensor_error_during_successful_change(self) -> None:
+        database = StatsDatabase(":memory:")
+        try:
+            database.observe({"current_tool": 0, "print_state": "printing", "last_error": ""})
+            database.observe({"current_tool": -2, "print_state": "printing", "last_error": "", "operation": "dropping"})
+            database.observe({"current_tool": -1, "print_state": "printing", "last_error": "", "operation": "dropping"})
+            database.observe({"current_tool": -2, "print_state": "printing", "last_error": "", "operation": "picking"})
+            database.observe({"current_tool": 1, "print_state": "printing", "last_error": "", "operation": "idle"})
+            summary = database.summary()
+            self.assertEqual(summary["totals"]["toolchange_failed"], 0)
+            self.assertEqual(summary["totals"]["tool_park"], 1)
+            self.assertEqual(summary["totals"]["tool_pickup"], 1)
+        finally:
+            database.close()
+
+    def test_stats_record_each_controller_error_once(self) -> None:
+        database = StatsDatabase(":memory:")
+        try:
+            database.observe({"current_tool": 0, "print_state": "printing", "last_error": "", "target_tool": 1})
+            failed = {
+                "current_tool": -2,
+                "print_state": "paused",
+                "last_error": "MHC_SET: sensors did not confirm T1",
+                "operation": "idle",
+                "target_tool": 1,
+            }
+            database.observe(failed)
+            database.observe(failed)
+            summary = database.summary()
+            self.assertEqual(summary["totals"]["toolchange_failed"], 1)
+            self.assertEqual(summary["per_tool"][0]["tool"], 1)
+            self.assertEqual(summary["per_tool"][0]["errors"], 1)
+            self.assertEqual(summary["recent"][0]["details"]["message"], failed["last_error"])
+        finally:
+            database.close()
+
     def test_speed_apply_updates_source_and_runtime_feedrate(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             service = ControlService(AppConfig(

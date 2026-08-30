@@ -19,6 +19,8 @@ BASE_SETTINGS: tuple[dict[str, Any], ...] = (
     {"key": "clean_speed", "macro": "TOOL_CFG", "variable": "clean_speed", "label": "Brush movement", "group": "Motion", "unit": "mm/s", "min": 1, "max": 300, "step": 1, "runtime_targets": [{"macro": "GLOBAL_STATE", "variable": "clean_feedrate", "multiplier": 60}]},
     {"key": "e_open", "macro": "TOOL_CFG", "variable": "e_open", "label": "Feeder open movement", "group": "Feeder", "unit": "mm", "min": -30, "max": 30, "step": 0.1},
     {"key": "e_close", "macro": "TOOL_CFG", "variable": "e_close", "label": "Feeder close movement", "group": "Feeder", "unit": "mm", "min": -30, "max": 30, "step": 0.1},
+    {"key": "servo_open_angle", "macro": "TOOL_CFG", "variable": "servo_open_angle", "label": "Servo open angle", "group": "Feeder", "unit": "°", "min": 0, "max": 180, "step": 1},
+    {"key": "servo_close_angle", "macro": "TOOL_CFG", "variable": "servo_close_angle", "label": "Servo close angle", "group": "Feeder", "unit": "°", "min": 0, "max": 180, "step": 1},
     {"key": "e_cur_high_mult", "macro": "TOOL_CFG", "variable": "e_cur_high_mult", "label": "Feeder current multiplier", "group": "Feeder", "min": 1, "max": 2.2, "step": 0.05},
     {"key": "eddy_z", "macro": "GLOBAL_STATE", "variable": "eddy_z", "label": "Additional tap Z offset", "group": "Calibration", "unit": "mm", "min": -5, "max": 5, "step": 0.01},
 )
@@ -33,6 +35,8 @@ TOOL_SETTINGS: tuple[dict[str, Any], ...] = (
     {"variable": "first_prime_flag", "category": "First Prime"},
     {"variable": "first_prime_amount", "category": "First Prime", "unit": "mm", "min": 0, "max": 100, "step": 0.1},
     {"variable": "first_prime_speed", "category": "First Prime", "unit": "mm/s", "min": 0.1, "max": 100, "step": 0.1},
+    {"variable": "first_prime_prime_retract", "category": "First Prime", "unit": "mm", "min": 0, "max": 20, "step": 0.1},
+    {"variable": "first_prime_clean_retract", "category": "First Prime", "unit": "mm", "min": 0, "max": 20, "step": 0.1},
     {"variable": "clean_move", "category": "Cleaning", "type": "choice", "choices": [{"value": 1, "label": "Enabled"}, {"value": 0, "label": "Disabled"}]},
     {"variable": "x_clean_move", "category": "Cleaning", "unit": "mm", "min": 0, "max": 50, "step": 0.1},
     {"variable": "y_clean_move", "category": "Cleaning", "unit": "mm", "min": 0, "max": 50, "step": 0.1},
@@ -62,7 +66,8 @@ def inspect_variable_config(text: str) -> dict[tuple[str, str], dict[str, Any]]:
     for line_number, line in enumerate(text.splitlines(), start=1):
         section_match = _SECTION_RE.match(line)
         if section_match:
-            macro = section_match.group(1).strip()
+            source_macro = section_match.group(1).strip()
+            macro = _canonical_macro(source_macro)
             pending_comments = []
             internal_block = False
             continue
@@ -88,6 +93,7 @@ def inspect_variable_config(text: str) -> dict[tuple[str, str], dict[str, Any]]:
         numeric_value = _numeric_literal(raw_value.strip())
         discovered[(macro, variable)] = {
             "macro": macro,
+            "source_macro": source_macro,
             "variable": variable,
             "raw_value": raw_value.strip(),
             "numeric_value": numeric_value,
@@ -150,6 +156,7 @@ def schema_for(
                 template["description"] = str(metadata.get("description", ""))
                 definition = _tool_definition(tool, template, available=True)
                 definition["configured_value"] = metadata.get("numeric_value")
+                definition["source_macro"] = metadata.get("source_macro", macro)
                 definition["internal"] = bool(metadata.get("internal")) or variable == "first_prime_flag"
                 definition["default_visible"] = category is not None and not definition["internal"]
                 schema.append(definition)
@@ -170,6 +177,7 @@ def schema_for(
             template.update({
                 "key": f"global_{variable}",
                 "macro": macro,
+                "source_macro": metadata.get("source_macro", macro),
                 "label": variable,
                 "group": f"Shared {category}",
                 "page": "tuning",
@@ -185,7 +193,7 @@ def schema_for(
 
     for tool in range(tool_count):
         for axis in ("x", "y", "z"):
-            schema.append({
+            offset_definition = {
                 "key": f"t{tool}_offset_{axis}",
                 "macro": "TOOL_OFFSET",
                 "variable": f"t{tool}_off_{axis}",
@@ -203,7 +211,11 @@ def schema_for(
                 "layout_key": f"tool_offset:{axis}",
                 "default_visible": True,
                 "available": True,
-            })
+            }
+            schema.append(
+                _with_availability(offset_definition, discovered, discovery_error)
+                if discovered is not None else offset_definition
+            )
     if discovered is not None:
         represented = {(str(item["macro"]), str(item["variable"])) for item in schema}
         for (macro, variable), metadata in discovered.items():
@@ -214,6 +226,7 @@ def schema_for(
             schema.append({
                 "key": f"advanced_{_key_fragment(macro)}_{variable}",
                 "macro": macro,
+                "source_macro": metadata.get("source_macro", macro),
                 "variable": variable,
                 "label": variable,
                 "group": "Advanced variables",
@@ -293,6 +306,7 @@ def _with_availability(
         result.setdefault("description", str(discovered[(macro, variable)]["description"]))
     if result["available"]:
         metadata = discovered[(macro, variable)]
+        result["source_macro"] = metadata.get("source_macro", macro)
         result["configured_value"] = metadata.get("numeric_value")
         result["internal"] = bool(metadata.get("internal"))
         if result["internal"]:
@@ -331,3 +345,12 @@ def _numeric_literal(raw_value: str) -> float | int | None:
 
 def _key_fragment(value: str) -> str:
     return re.sub(r"[^a-z0-9]+", "_", value.lower()).strip("_")
+
+
+def _canonical_macro(name: str) -> str:
+    candidate = name[1:] if name.startswith("_") else name
+    if candidate in {"TOOL_CFG", "GLOBAL_STATE", "TOOL_OFFSET"}:
+        return candidate
+    if re.fullmatch(r"TOOL_STATE_\d+", candidate):
+        return candidate
+    return name

@@ -149,11 +149,12 @@ The Calibration page is a collection of independent macro buttons. It is not a
 step-by-step wizard and it does not replace the configuration required by each
 calibration method.
 
-- **XYZ tool calibration** calls `CALIBRATE_AND_SAVE_OFFSETS`. Use it with the
-  configured SexBall, Nudge, or another compatible klipper-toolchanger contact
-  sensor.
-- **Tool Z calibration** calls `TOOL_Z_CALIBRATION`. It is intended for the
-  configured Klipper tap-probe procedure when only tool Z needs calibration.
+- **Contact XYZ calibration** calls `CALIBRATE_XYZ_TOUCH`. On a legacy macro
+  installation it automatically falls back to `CALIBRATE_AND_SAVE_OFFSETS`.
+- **Eddy XYZ calibration** calls `CALIBRATE_XYZ_EDDY` for native Eddy Tap Z and
+  stationary EddySeek XY calibration.
+- **Eddy Z calibration** calls `CALIBRATE_Z_EDDY`. On a legacy installation it
+  automatically falls back to `TOOL_Z_CALIBRATION`.
 - **Z Tilt** calls `Z_TILT_ADJUST`.
 - **Bed calibration** calls the configured `BED_CALIBRATION` MedusaHC entry
   point.
@@ -188,7 +189,7 @@ during a print.
 
 The current MedusaHC configuration stores `fast_speed`, `slow_speed`, and
 `clean_speed` in mm/s, but its movement macros use the corresponding
-`GLOBAL_STATE` feedrates in mm/min. When one of these three speed fields is
+`_GLOBAL_STATE` (or legacy `GLOBAL_STATE`) feedrates in mm/min. When one of these three speed fields is
 applied, reset, or saved, the panel updates both values immediately:
 
 - `fast_speed` also sets `fast_feedrate = fast_speed × 60`;
@@ -358,7 +359,8 @@ or reload MedusaHC Control.
 
 ### Wrong tool count
 
-Verify `GLOBAL_STATE.variable_max_tool` in the running MedusaHC configuration.
+Verify `_GLOBAL_STATE.variable_max_tool` (or legacy
+`GLOBAL_STATE.variable_max_tool`) in the running MedusaHC configuration.
 The interface reads the tool count from Klipper and rebuilds the tool cards
 automatically.
 

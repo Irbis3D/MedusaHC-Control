@@ -10,7 +10,7 @@ GREEN = {"00C853", "00FF00"}
 RED = {"D32F2F", "FF0000"}
 BLUE = {"1976D2", "0000FF"}
 def _macro(status: dict[str, Any], name: str) -> dict[str, Any]:
-    value = status.get(f"gcode_macro {name}", {})
+    value = status.get(f"gcode_macro _{name}", status.get(f"gcode_macro {name}", {}))
     return value if isinstance(value, dict) else {}
 
 
@@ -22,7 +22,12 @@ def normalize_status(status: dict[str, Any]) -> dict[str, Any]:
     saved_values = save_variables.get("variables", {}) if isinstance(save_variables, dict) else {}
     if not isinstance(saved_values, dict):
         saved_values = {}
-    pin_watch = status.get("mhc_dashboard", {}) or status.get("pin_watch io", {}) or {}
+    pin_watch = (
+        status.get("medusahc", {})
+        or status.get("mhc_dashboard", {})
+        or status.get("pin_watch io", {})
+        or {}
+    )
     tool_count = _tool_count(status, global_state, pin_watch)
     current_tool = int(pin_watch.get("current_tool", -2))
     raw_sensors = pin_watch.get("sensors", {}) or {}
@@ -31,12 +36,20 @@ def normalize_status(status: dict[str, Any]) -> dict[str, Any]:
         "GLOBAL_STATE": _numeric_variables(global_state),
         "TOOL_OFFSET": _numeric_variables(offsets),
     }
+    macro_names = {
+        name: (f"_{name}" if f"gcode_macro _{name}" in status else name)
+        for name in ("TOOL_CFG", "GLOBAL_STATE", "TOOL_OFFSET")
+    }
 
     tools = []
     for index in range(tool_count):
         macro = _macro(status, f"T{index}")
         tool_state = _macro(status, f"TOOL_STATE_{index}")
         macro_values[f"TOOL_STATE_{index}"] = _numeric_variables(tool_state)
+        logical_state = f"TOOL_STATE_{index}"
+        macro_names[logical_state] = (
+            f"_{logical_state}" if f"gcode_macro _{logical_state}" in status else logical_state
+        )
         heater_name = "extruder" if index == 0 else f"extruder{index}"
         heater = status.get(heater_name, {}) or {}
         color = str(macro.get("color", "")).replace("#", "").upper()
@@ -85,6 +98,11 @@ def normalize_status(status: dict[str, Any]) -> dict[str, Any]:
     printing = print_state in {"printing", "paused"}
     sensor_error = current_tool == -2
     can_move = ready and not printing and not sensor_error
+    available_macros = {
+        name.removeprefix("gcode_macro ")
+        for name in status
+        if name.startswith("gcode_macro ")
+    }
     settings = {}
     settings.update({key: value for key, value in tool_cfg.items() if not key.startswith("_")})
     settings["eddy_z"] = float(global_state.get("eddy_z", 0.0))
@@ -106,13 +124,17 @@ def normalize_status(status: dict[str, Any]) -> dict[str, Any]:
         "layout": "front" if int(tool_cfg.get("tools_direction", 1)) == 1 else "rear",
         "tool_count": tool_count,
         "current_tool": current_tool,
-        "target_tool": int(global_state.get("target_tool", -1)),
+        "target_tool": int(pin_watch.get("target_tool", global_state.get("target_tool", -1))),
         "sensor_error": sensor_error,
-        "feeder_open": bool(global_state.get("feeder_open", 0)),
+        "feeder_open": bool(pin_watch.get("feeder_open", global_state.get("feeder_open", 0))),
+        "operation": str(pin_watch.get("operation", "idle")),
+        "last_error": str(pin_watch.get("last_error", "")),
         "tools": tools,
         "sensors": {str(key): int(value) for key, value in raw_sensors.items()},
         "settings": settings,
         "macro_values": macro_values,
+        "macro_names": macro_names,
+        "available_macros": sorted(available_macros),
         "saved_variables": _numeric_variables(saved_values),
         "capabilities": {
             "can_home": ready and not printing,
@@ -123,6 +145,13 @@ def normalize_status(status: dict[str, Any]) -> dict[str, Any]:
             "can_clean": can_move and current_tool >= 0,
             "can_feeder": ready and not printing,
             "can_calibrate": can_move,
+            "can_calibrate_touch": can_move and bool(
+                {"CALIBRATE_XYZ_TOUCH", "CALIBRATE_AND_SAVE_OFFSETS"} & available_macros
+            ),
+            "can_calibrate_xyz_eddy": can_move and "CALIBRATE_XYZ_EDDY" in available_macros,
+            "can_calibrate_z_eddy": can_move and bool(
+                {"CALIBRATE_Z_EDDY", "TOOL_Z_CALIBRATION"} & available_macros
+            ),
             "can_edit": ready and not printing,
             "can_system": True,
         },
@@ -181,6 +210,8 @@ def disconnected_state(message: str) -> dict[str, Any]:
         "sensors": {},
         "settings": {},
         "macro_values": {},
+        "macro_names": {},
+        "available_macros": [],
         "saved_variables": {},
         "capabilities": {key: False for key in ("can_home", "can_jog", "can_heat", "can_select", "can_drop", "can_clean", "can_feeder", "can_calibrate", "can_edit", "can_system")},
         "message": message,
@@ -235,10 +266,15 @@ class Simulator:
                 "clean_speed": 50,
                 "e_open": -5.0,
                 "e_close": 3.0,
+                "servo_open_angle": 180,
+                "servo_close_angle": 0,
                 "e_cur_high_mult": 1.7,
                 **{f"x_t{i}": 17 + i * 57 for i in range(tool_count)},
             },
             "gcode_macro TOOL_OFFSET": {},
+            "gcode_macro CALIBRATE_XYZ_TOUCH": {},
+            "gcode_macro CALIBRATE_XYZ_EDDY": {},
+            "gcode_macro CALIBRATE_Z_EDDY": {},
             "save_variables": {"variables": {}},
         }
         for index in range(tool_count):
@@ -251,6 +287,8 @@ class Simulator:
                 "ptfe_clean_slow_speed": 5, "clean_retract": 1,
                 "clean_retract_speed": 30, "first_prime_flag": 1,
                 "first_prime_amount": 20, "first_prime_speed": 20,
+                "first_prime_prime_retract": 0.2,
+                "first_prime_clean_retract": 0.1,
             }
             raw["gcode_macro TOOL_OFFSET"].update({
                 f"t{index}_off_x": 0.0,
@@ -323,7 +361,7 @@ class Simulator:
         elif action == "jog":
             axis_index = {"X": 0, "Y": 1, "Z": 2}[str(payload["axis"]).upper()]
             self._state["toolhead"]["position"][axis_index] += float(payload["distance"])
-        elif action in {"clean", "test_tools", "calibrate_xyz", "calibrate_z", "calibrate_bed", "calibrate_z_tilt", "emergency_stop", "restart_klipper", "restart_firmware", "reboot_device"}:
+        elif action in {"clean", "test_tools", "calibrate_xyz", "calibrate_z", "calibrate_xyz_touch", "calibrate_xyz_eddy", "calibrate_z_eddy", "calibrate_bed", "calibrate_z_tilt", "emergency_stop", "restart_klipper", "restart_firmware", "reboot_device"}:
             if action == "emergency_stop":
                 self._state["webhooks"]["state"] = "shutdown"
 

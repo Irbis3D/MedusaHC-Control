@@ -17,6 +17,9 @@ class MHCDashboard:
         self.pin_watch = self.printer.lookup_object(self.pin_watch_name, None)
 
     def get_status(self, eventtime):
+        controller = self.printer.lookup_object("medusahc", None)
+        if controller is not None:
+            return controller.get_status(eventtime)
         source = self.pin_watch
         if source is None:
             source = self.printer.lookup_object(self.pin_watch_name, None)
@@ -53,4 +56,3 @@ class MHCDashboard:
 
 def load_config(config):
     return MHCDashboard(config)
-

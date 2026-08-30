@@ -13,9 +13,12 @@ Open an SSH terminal on the printer and run one command:
 curl -fsSL https://raw.githubusercontent.com/Irbis3D/MedusaHC-Control/main/install-online.sh | sudo bash
 ```
 
-The system may request the normal sudo password. The installer first asks for
-the web interface port. Press Enter to use `8090`, or enter another port.
-It then asks two independent questions: whether it may add its marked include
+The system may request the normal sudo password. The single panel edition
+supports both the current Python controller and the frozen macro controller.
+It never installs, replaces, or removes the MedusaHC controller or its macros.
+
+The installer asks for the web interface port. Press Enter to use `8090`,
+or enter another port. It also asks two independent questions: whether it may add its marked include
 to `printer.cfg`, and whether it may register the project in `moonraker.conf`
 for Mainsail updates. Press Enter to accept each default automatic integration,
 or answer `n` to receive the exact manual instructions instead.
@@ -28,7 +31,7 @@ editing either main configuration file, it asks separately whether each managed
 include may be added automatically.
 
 Updates reuse the saved port without asking again. For unattended installation,
-`--yes` uses port `8090`; set `MEDUSAHC_PORT` to choose a different port.
+`--yes` uses port `8090`, and `MEDUSAHC_PORT` selects a different port.
 
 The installer treats everything from Klipper's `SAVE_CONFIG` marker to the end
 of `printer.cfg` as protected calibration data. Automatic install and uninstall
@@ -40,7 +43,7 @@ Update Manager integration is accepted, Moonraker manages it as a `git_repo`
 extension and restarts both `medusahc-control` and Klipper after an update.
 
 Tool count is never hard-coded by the installer or dashboard. The running panel
-reads `GLOBAL_STATE.variable_max_tool` and dynamically creates T0 through the
+reads `_GLOBAL_STATE.variable_max_tool` or its legacy unprefixed equivalent and dynamically creates T0 through the
 last configured tool, including heaters, sensors, dock coordinates, tuning
 fields, offsets and statistics.
 

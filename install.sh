@@ -7,7 +7,7 @@ LEGACY_APP_DIR="/opt/${APP_NAME}"
 STATE_DIR="/var/lib/${APP_NAME}"
 SERVICE_FILE="/etc/systemd/system/${APP_NAME}.service"
 REPOSITORY_URL="https://github.com/Irbis3D/MedusaHC-Control.git"
-PRIMARY_BRANCH="main"
+PRIMARY_BRANCH="${MEDUSAHC_CONTROL_REF:-main}"
 CONFIG_FILE="${STATE_DIR}/config.json"
 MANIFEST_FILE="${STATE_DIR}/install-state.env"
 MANAGED_BEGIN="# >>> MEDUSAHC CONTROL >>>"
@@ -22,6 +22,7 @@ dry_run=0
 purge=0
 manual_config=0
 manual_moonraker=0
+allow_moonraker_changes=0
 
 usage() {
   cat <<'EOF'
@@ -29,6 +30,7 @@ MedusaHC Control installer
 
 Usage:
   sudo ./install.sh [install|update] [--yes] [--dry-run] [--manual-config] [--manual-moonraker]
+                    [--allow-moonraker-changes]
   sudo ./install.sh uninstall [--yes] [--purge]
   ./install.sh status
   ./install.sh self-test
@@ -47,6 +49,7 @@ for argument in "$@"; do
     --purge) purge=1 ;;
     --manual-config) manual_config=1 ;;
     --manual-moonraker) manual_moonraker=1 ;;
+    --allow-moonraker-changes) allow_moonraker_changes=1 ;;
     --help|-h) usage; exit 0 ;;
     *) echo "Unknown argument: ${argument}" >&2; usage >&2; exit 2 ;;
   esac
@@ -159,6 +162,16 @@ confirm_change() {
   [[ "${reply}" =~ ^[Yy]$ ]] || { log "Cancelled."; exit 0; }
 }
 
+confirm_moonraker_change() {
+  local prompt="$1"
+  [[ "${allow_moonraker_changes}" -eq 1 || "${dry_run}" -eq 1 ]] && return
+  [[ -t 0 ]] || die "Moonraker changes require a separate confirmation or --allow-moonraker-changes."
+  printf '%s [y/N] ' "${prompt}"
+  local reply
+  read -r reply
+  [[ "${reply}" =~ ^[Yy]$ ]] || { log "Cancelled before changing Moonraker."; exit 0; }
+}
+
 choose_config_mode() {
   if grep -Eq '^[[:space:]]*\[mhc_dashboard\][[:space:]]*$' "${printer_cfg}"; then
     config_mode="existing"
@@ -203,11 +216,16 @@ choose_moonraker_mode() {
     moonraker_mode="manual"
     return
   fi
-  if [[ "${assume_yes}" -eq 1 || "${dry_run}" -eq 1 ]]; then
+  if [[ "${allow_moonraker_changes}" -eq 1 || "${dry_run}" -eq 1 ]]; then
     moonraker_mode="managed"
     return
   fi
-  [[ -t 0 ]] || die "Cannot ask permission to edit moonraker.conf. Re-run with --yes or --manual-moonraker."
+  if [[ ! -t 0 && "${assume_yes}" -eq 1 ]]; then
+    log "Moonraker changes were not explicitly approved; update-manager registration will be skipped."
+    moonraker_mode="manual"
+    return
+  fi
+  [[ -t 0 ]] || die "Cannot ask permission to edit moonraker.conf. Use --manual-moonraker or explicitly pass --allow-moonraker-changes."
   printf 'Register MedusaHC Control in moonraker.conf for updates through Mainsail? [Y/n] '
   local reply
   read -r reply
@@ -223,6 +241,7 @@ choose_moonraker_mode() {
 check_sources() {
   [[ -d "${SCRIPT_DIR}/medusahc_control" ]] || die "medusahc_control package is missing next to install.sh."
   [[ -f "${SCRIPT_DIR}/printer/mhc_dashboard.py" ]] || die "printer/mhc_dashboard.py is missing."
+  [[ -f "${SCRIPT_DIR}/printer/medusahc_control.cfg" ]] || die "printer/medusahc_control.cfg is missing."
   [[ -f "${SCRIPT_DIR}/VERSION" ]] || die "VERSION is missing next to install.sh."
   command -v git >/dev/null 2>&1 || die "git is required."
   python3 -c 'import sys; assert sys.version_info >= (3, 9), "Python 3.9 or newer is required"'
@@ -292,11 +311,7 @@ PY
 }
 
 write_dashboard_cfg() {
-  cat > "${managed_cfg}" <<'EOF'
-# Managed by MedusaHC Control. Remove through: sudo ./install.sh uninstall
-[mhc_dashboard]
-pin_watch: pin_watch io
-EOF
+  cp "${SCRIPT_DIR}/printer/medusahc_control.cfg" "${managed_cfg}"
   chown "${install_user}:${install_group}" "${managed_cfg}"
   chmod 0644 "${managed_cfg}"
 }
@@ -574,6 +589,7 @@ write_manifest() {
     printf 'MANAGED_CFG=%q\n' "${managed_cfg}"
     printf 'ADAPTER_TARGET=%q\n' "${adapter_target}"
     printf 'ADAPTER_MODE=%q\n' "${adapter_mode}"
+    printf 'PANEL_BRANCH=%q\n' "${PRIMARY_BRANCH}"
     printf 'CONFIG_MODE=%q\n' "${config_mode}"
     printf 'MOONRAKER_MODE=%q\n' "${moonraker_mode}"
     printf 'PORT=%q\n' "${port}"
@@ -695,7 +711,10 @@ uninstall_application() {
   if [[ "${config_mode}" == "manual" ]] && grep -Eq '^[[:space:]]*\[include[[:space:]]+medusahc_control\.cfg\][[:space:]]*$' "${printer_cfg}"; then
     die "Manual config mode is active. Remove [include medusahc_control.cfg] from printer.cfg, restart Klipper, then run uninstall again."
   fi
-  confirm_change "Remove MedusaHC Control and restart Klipper and Moonraker?"
+  if [[ "${moonraker_mode}" == "managed" ]]; then
+    confirm_moonraker_change "Remove the MedusaHC updater block from moonraker.conf and restart Moonraker?"
+  fi
+  confirm_change "Remove MedusaHC Control and restart Klipper?"
 
   if [[ "${dry_run}" -eq 0 ]]; then
     systemctl disable --now "${APP_NAME}.service" >/dev/null 2>&1 || true
@@ -767,8 +786,10 @@ self_test() {
   original="${test_dir}/printer.original.cfg"
   moonraker_cfg="${test_dir}/moonraker.conf"
   moonraker_original="${test_dir}/moonraker.original.conf"
+  variables_cfg="${test_dir}/MHC_variables.cfg"
   printf '[include MHC_variables.cfg]\n\n#*# <---------------------- SAVE_CONFIG ---------------------->\n#*# test = 1\n' > "${printer_cfg}"
   printf '[server]\nhost: 0.0.0.0\n' > "${moonraker_cfg}"
+  printf '[include MHC_config.cfg]\n[include MHC_macros.cfg]\n' > "${variables_cfg}"
   cp "${printer_cfg}" "${original}"
   manual_config=1
   assume_yes=0
@@ -784,6 +805,7 @@ self_test() {
   [[ "${moonraker_mode}" == "manual" ]] || die "Manual moonraker.conf mode was not selected."
   manual_moonraker=0
   assume_yes=1
+  allow_moonraker_changes=1
   choose_moonraker_mode
   [[ "${moonraker_mode}" == "managed" ]] || die "Confirmed automatic moonraker.conf mode was not selected."
   write_managed_include

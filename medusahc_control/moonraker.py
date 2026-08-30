@@ -66,10 +66,14 @@ class MoonrakerClient:
             "toolchanger",
             "pin_watch io",
             "mhc_dashboard",
+            "medusahc",
             "save_variables",
             "gcode_macro TOOL_CFG",
+            "gcode_macro _TOOL_CFG",
             "gcode_macro GLOBAL_STATE",
+            "gcode_macro _GLOBAL_STATE",
             "gcode_macro TOOL_OFFSET",
+            "gcode_macro _TOOL_OFFSET",
         }
         for name in objects:
             if (
@@ -77,6 +81,14 @@ class MoonrakerClient:
                 or re.fullmatch(r"extruder\d+", name)
                 or re.fullmatch(r"gcode_macro T\d+", name)
                 or re.fullmatch(r"gcode_macro TOOL_STATE_\d+", name)
+                or re.fullmatch(r"gcode_macro _TOOL_STATE_\d+", name)
+                or name in {
+                    "gcode_macro CALIBRATE_XYZ_TOUCH",
+                    "gcode_macro CALIBRATE_XYZ_EDDY",
+                    "gcode_macro CALIBRATE_Z_EDDY",
+                    "gcode_macro CALIBRATE_AND_SAVE_OFFSETS",
+                    "gcode_macro TOOL_Z_CALIBRATION",
+                }
             ):
                 wanted.add(name)
         selected = sorted(wanted & objects)

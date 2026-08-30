@@ -19,7 +19,9 @@ class StatsDatabase:
         self._connection = sqlite3.connect(path, check_same_thread=False)
         self._connection.row_factory = sqlite3.Row
         self._lock = threading.RLock()
-        self._last_state: tuple[int, bool, str] | None = None
+        self._last_state: tuple[int, str, str] | None = None
+        self._last_confirmed_tool: int | None = None
+        self._last_error = ""
         self._initialize()
 
     def _initialize(self) -> None:
@@ -157,30 +159,50 @@ class StatsDatabase:
 
     def observe(self, state: dict[str, Any]) -> None:
         current_tool = int(state.get("current_tool", -2))
-        sensor_error = bool(state.get("sensor_error", current_tool == -2))
         print_state = str(state.get("print_state", "unknown"))
-        observed = (current_tool, sensor_error, print_state)
+        last_error = str(state.get("last_error", "") or "")
+        operation = str(state.get("operation", "idle"))
+        target_tool = int(state.get("target_tool", -1))
+        observed = (current_tool, print_state, last_error)
         with self._lock:
             previous = self._last_state
             self._last_state = observed
+            old_confirmed = self._last_confirmed_tool
+            old_error = self._last_error
+            self._last_error = last_error
+            if current_tool != -2:
+                self._last_confirmed_tool = current_tool
         if previous is None:
             return
-        old_tool, old_error, _old_print_state = previous
-        if print_state != "printing":
-            return
-        if sensor_error and not old_error:
+
+        # A physical tool change naturally passes through current_tool=-2 while
+        # the head and dock switches change at different instants.  Only the
+        # controller's persistent last_error represents a completed failure.
+        if last_error and last_error != old_error and print_state in {"printing", "paused"}:
+            failed_tool = target_tool if target_tool >= 0 else old_confirmed
             self.record(
                 "toolchange_failed",
-                tool=old_tool if old_tool >= 0 else None,
+                tool=failed_tool if failed_tool is not None and failed_tool >= 0 else None,
                 success=False,
-                details={"previous_tool": old_tool},
+                details={
+                    "previous_tool": old_confirmed,
+                    "target_tool": target_tool,
+                    "operation": operation,
+                    "message": last_error,
+                },
             )
-        if current_tool == old_tool:
+
+        # Ignore ambiguous intermediate sensor combinations.  When a stable
+        # state arrives, compare it with the last stable state so transitions
+        # such as T0 -> -2 -> -1 -> -2 -> T1 remain one park and one pickup.
+        if current_tool == -2 or old_confirmed is None or current_tool == old_confirmed:
             return
-        if old_tool >= 0:
-            self.record("tool_park", tool=old_tool, details={"next_tool": current_tool})
+        if print_state != "printing":
+            return
+        if old_confirmed >= 0:
+            self.record("tool_park", tool=old_confirmed, details={"next_tool": current_tool})
         if current_tool >= 0:
-            self.record("tool_pickup", tool=current_tool, details={"previous_tool": old_tool})
+            self.record("tool_pickup", tool=current_tool, details={"previous_tool": old_confirmed})
 
     def reset_toolchange_stats(self) -> dict[str, Any]:
         started_at = time.time()
@@ -192,6 +214,8 @@ class StatsDatabase:
                 (str(started_at),),
             )
             self._last_state = None
+            self._last_confirmed_tool = None
+            self._last_error = ""
         return {"ok": True, "started_at": started_at}
 
     def summary(self, recent_limit: int = 24) -> dict[str, Any]:
