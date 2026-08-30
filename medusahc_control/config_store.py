@@ -38,7 +38,7 @@ class ConfigStore:
             original = self.variables_config.read_text(encoding="utf-8")
             updated = self._replace_macro_variable(
                 original,
-                str(definition["macro"]),
+                str(definition.get("source_macro", definition["macro"])),
                 str(definition["variable"]),
                 value,
             )

@@ -255,7 +255,7 @@ function updateActionAvailability(state) {
   const mapping = {
     home: "can_home", select_tool: "can_select", drop_tool: "can_drop", clean: "can_clean", test_tools: "can_select",
     feeder_open: "can_feeder", feeder_close: "can_feeder", calibrate_xyz: "can_calibrate",
-    calibrate_z: "can_calibrate", calibrate_bed: "can_calibrate", calibrate_z_tilt: "can_calibrate",
+    calibrate_z: "can_calibrate", calibrate_xyz_touch: "can_calibrate_touch", calibrate_xyz_eddy: "can_calibrate_xyz_eddy", calibrate_z_eddy: "can_calibrate_z_eddy", calibrate_bed: "can_calibrate", calibrate_z_tilt: "can_calibrate",
     restart_klipper: "can_system", restart_firmware: "can_system", reboot_device: "can_system",
   };
   $$('[data-action]').forEach(button => {
@@ -285,7 +285,7 @@ async function runAction(action, payload = {}) {
     home: "Homing started", home_axis: `Homing ${payload.axis}`, jog: `Moving ${payload.axis}`,
     select_tool: `Selecting T${payload.tool}`, drop_tool: "Parking current tool",
     clean: "Cleaning cycle started", test_tools: "Tool test sequence started", feeder_open: "Opening feeder", feeder_close: "Closing feeder",
-    calibrate_xyz: "XYZ calibration started", calibrate_z: "Z calibration started", calibrate_bed: "Bed calibration started", calibrate_z_tilt: "Z Tilt started",
+    calibrate_xyz: "XYZ calibration started", calibrate_z: "Z calibration started", calibrate_xyz_touch: "Contact XYZ calibration started", calibrate_xyz_eddy: "Eddy XYZ calibration started", calibrate_z_eddy: "Eddy Z calibration started", calibrate_bed: "Bed calibration started", calibrate_z_tilt: "Z Tilt started",
     set_temperature: `Temperature target sent to T${payload.tool}`, emergency_stop: "Emergency stop sent",
     restart_klipper: "Klipper restart requested", restart_firmware: "Firmware restart requested", reboot_device: "Device reboot requested",
   };
@@ -309,7 +309,7 @@ async function setControlMode(enabled) {
   }
 }
 
-const destructiveActions = new Set(["home", "select_tool", "drop_tool", "clean", "test_tools", "feeder_open", "feeder_close", "calibrate_xyz", "calibrate_z", "calibrate_bed", "calibrate_z_tilt", "emergency_stop", "restart_klipper", "restart_firmware", "reboot_device"]);
+const destructiveActions = new Set(["home", "select_tool", "drop_tool", "clean", "test_tools", "feeder_open", "feeder_close", "calibrate_xyz", "calibrate_z", "calibrate_xyz_touch", "calibrate_xyz_eddy", "calibrate_z_eddy", "calibrate_bed", "calibrate_z_tilt", "emergency_stop", "restart_klipper", "restart_firmware", "reboot_device"]);
 const alwaysConfirmActions = new Set(["restart_klipper", "restart_firmware", "reboot_device"]);
 
 function confirmAction(action, payload = {}) {
@@ -324,6 +324,9 @@ function confirmAction(action, payload = {}) {
     home_axis: `The printer will home the ${payload.axis} axis.`,
     calibrate_xyz: "A complete multi-tool XYZ calibration will start. Verify the calibration probe before continuing.",
     calibrate_z: "Tool Z calibration will start. Verify the tap probe and clear the bed.",
+    calibrate_xyz_touch: "Contact XYZ calibration will start. Verify the contact sensor and keep the complete movement area clear.",
+    calibrate_xyz_eddy: "Eddy XYZ calibration will start. Verify Eddy Tap, EddySeek, sensor coordinates and clear the bed.",
+    calibrate_z_eddy: "Eddy Z calibration will start. Verify the tap probe and clear the bed.",
     calibrate_bed: "Bed calibration will start. Verify the configured probe.",
     calibrate_z_tilt: "Klipper Z Tilt adjustment will start. Home all axes and verify the probe before continuing.",
     emergency_stop: "Klipper will immediately enter shutdown. Heaters and motion will stop.",

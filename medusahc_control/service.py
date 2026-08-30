@@ -35,6 +35,9 @@ ACTION_CAPABILITY = {
     "feeder_close": "can_feeder",
     "calibrate_xyz": "can_calibrate",
     "calibrate_z": "can_calibrate",
+    "calibrate_xyz_touch": "can_calibrate_touch",
+    "calibrate_xyz_eddy": "can_calibrate_xyz_eddy",
+    "calibrate_z_eddy": "can_calibrate_z_eddy",
     "calibrate_bed": "can_calibrate",
     "calibrate_z_tilt": "can_calibrate",
     "set_temperature": "can_heat",
@@ -46,6 +49,7 @@ ACTION_CAPABILITY = {
 QUEUED_ACTIONS = {
     "home", "home_axis", "select_tool", "drop_tool", "clean", "test_tools",
     "feeder_open", "feeder_close", "calibrate_xyz", "calibrate_z",
+    "calibrate_xyz_touch", "calibrate_xyz_eddy", "calibrate_z_eddy",
     "calibrate_bed", "calibrate_z_tilt",
 }
 
@@ -256,13 +260,25 @@ class ControlService:
             discovery_warning,
         )
         macro_values = state.get("macro_values", {})
+        macro_names = state.get("macro_names", {})
         for definition in schema:
+            logical_macro = str(definition["macro"])
+            definition["runtime_macro"] = str(
+                macro_names.get(
+                    logical_macro,
+                    definition.get("source_macro", logical_macro),
+                )
+            )
             active_targets = []
             for target in definition.get("runtime_targets", []):
                 target_macro = str(target.get("macro", ""))
                 target_variable = str(target.get("variable", ""))
                 if target_variable in macro_values.get(target_macro, {}):
-                    active_targets.append(dict(target))
+                    active_target = dict(target)
+                    runtime_target_macro = str(macro_names.get(target_macro, target_macro))
+                    if runtime_target_macro != target_macro:
+                        active_target["runtime_macro"] = runtime_target_macro
+                    active_targets.append(active_target)
             definition["active_runtime_targets"] = active_targets
             if not definition.get("available", True):
                 continue
@@ -353,12 +369,12 @@ class ControlService:
                 self._moonraker.reboot_device()
             elif action in QUEUED_ACTIONS:
                 try:
-                    self._command_queue.put_nowait((action, self._console_gcode(action, payload), tool))
+                    self._command_queue.put_nowait((action, self._console_gcode(action, payload, state), tool))
                 except queue.Full as exc:
                     raise SafetyError("The printer command queue is full") from exc
                 queued = True
             else:
-                self._moonraker.send_gcode(self._console_gcode(action, payload))
+                self._moonraker.send_gcode(self._console_gcode(action, payload, state))
         self.database.record(
             "command",
             tool=tool,
@@ -434,7 +450,7 @@ class ControlService:
         ]
         commands.extend(
             f"SET_GCODE_VARIABLE MACRO={macro} VARIABLE={variable} VALUE={value:g}"
-            for macro, variable, value in self._runtime_setting_updates(definition, numeric)
+            for macro, variable, value in self._runtime_command_updates(definition, numeric)
         )
         self._moonraker.send_gcode("\n".join(commands))
 
@@ -455,6 +471,23 @@ class ControlService:
             ))
         return updates
 
+    @staticmethod
+    def _runtime_command_updates(
+        definition: dict[str, Any], value: float | int
+    ) -> list[tuple[str, str, float]]:
+        updates = [(
+            str(definition.get("runtime_macro", definition["macro"])),
+            str(definition["variable"]),
+            float(value),
+        )]
+        for target in definition.get("active_runtime_targets", []):
+            updates.append((
+                str(target.get("runtime_macro", target["macro"])),
+                str(target["variable"]),
+                float(value) * float(target.get("multiplier", 1)),
+            ))
+        return updates
+
     def _announce(self, action: str, payload: dict[str, Any]) -> None:
         assert self._moonraker is not None
         try:
@@ -466,10 +499,12 @@ class ControlService:
             LOG.info("Could not write system action to Klipper console: %s", exc)
 
     @classmethod
-    def _console_gcode(cls, action: str, payload: dict[str, Any]) -> str:
+    def _console_gcode(
+        cls, action: str, payload: dict[str, Any], state: dict[str, Any] | None = None
+    ) -> str:
         return (
             f'RESPOND TYPE=command MSG="MedusaHC Control: {cls._console_message(action, payload)}"\n'
-            f"{cls._gcode(action, payload)}"
+            f"{cls._gcode(action, payload, state)}"
         )
 
     @staticmethod
@@ -483,6 +518,9 @@ class ControlService:
             "feeder_close": "close feeder",
             "calibrate_xyz": "start XYZ tool calibration",
             "calibrate_z": "start Z tool calibration",
+            "calibrate_xyz_touch": "start contact XYZ tool calibration",
+            "calibrate_xyz_eddy": "start Eddy XYZ tool calibration",
+            "calibrate_z_eddy": "start Eddy Z tool calibration",
             "calibrate_bed": "start bed calibration",
             "calibrate_z_tilt": "start Z tilt adjustment",
             "emergency_stop": "EMERGENCY STOP",
@@ -519,7 +557,10 @@ class ControlService:
         return "The action is blocked by the current printer state"
 
     @staticmethod
-    def _gcode(action: str, payload: dict[str, Any]) -> str:
+    def _gcode(
+        action: str, payload: dict[str, Any], state: dict[str, Any] | None = None
+    ) -> str:
+        available = set((state or {}).get("available_macros", []))
         if action == "home":
             return "G28"
         if action == "home_axis":
@@ -547,9 +588,17 @@ class ControlService:
         if action == "feeder_close":
             return "CLOSE"
         if action == "calibrate_xyz":
-            return "CALIBRATE_AND_SAVE_OFFSETS"
+            return "CALIBRATE_XYZ_TOUCH" if "CALIBRATE_XYZ_TOUCH" in available else "CALIBRATE_AND_SAVE_OFFSETS"
         if action == "calibrate_z":
-            return "TOOL_Z_CALIBRATION"
+            return "CALIBRATE_Z_EDDY" if "CALIBRATE_Z_EDDY" in available else "TOOL_Z_CALIBRATION"
+        if action == "calibrate_xyz_touch":
+            return "CALIBRATE_XYZ_TOUCH" if "CALIBRATE_XYZ_TOUCH" in available else "CALIBRATE_AND_SAVE_OFFSETS"
+        if action == "calibrate_xyz_eddy":
+            if "CALIBRATE_XYZ_EDDY" not in available:
+                raise ValueError("CALIBRATE_XYZ_EDDY is not installed")
+            return "CALIBRATE_XYZ_EDDY"
+        if action == "calibrate_z_eddy":
+            return "CALIBRATE_Z_EDDY" if "CALIBRATE_Z_EDDY" in available else "TOOL_Z_CALIBRATION"
         if action == "calibrate_bed":
             return "BED_CALIBRATION"
         if action == "calibrate_z_tilt":

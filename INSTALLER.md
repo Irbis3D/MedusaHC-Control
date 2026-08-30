@@ -10,12 +10,12 @@ Update Manager.
 Open an SSH terminal on the printer and run one command:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Irbis3D/MedusaHC-Control/python-controller/install-online.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/Irbis3D/MedusaHC-Control/main/install-online.sh | sudo bash
 ```
 
-The system may request the normal sudo password. This installer downloads the
-Python-controller edition of the panel and never installs, replaces or removes
-the MedusaHC controller or its macros.
+The system may request the normal sudo password. The single panel edition
+supports both the current Python controller and the frozen macro controller.
+It never installs, replaces, or removes the MedusaHC controller or its macros.
 
 The installer asks for the web interface port. Press Enter to use `8090`,
 or enter another port. It also asks two independent questions: whether it may add its marked include
@@ -43,7 +43,7 @@ Update Manager integration is accepted, Moonraker manages it as a `git_repo`
 extension and restarts both `medusahc-control` and Klipper after an update.
 
 Tool count is never hard-coded by the installer or dashboard. The running panel
-reads `GLOBAL_STATE.variable_max_tool` and dynamically creates T0 through the
+reads `_GLOBAL_STATE.variable_max_tool` or its legacy unprefixed equivalent and dynamically creates T0 through the
 last configured tool, including heaters, sensors, dock coordinates, tuning
 fields, offsets and statistics.
 
@@ -65,7 +65,7 @@ read -rsp "GitHub token: " GH_TOKEN; echo
 curl -fsSL \
   -H "Authorization: Bearer $GH_TOKEN" \
   -H "Accept: application/vnd.github.raw+json" \
-  "https://api.github.com/repos/Irbis3D/MedusaHC-Control/contents/install-online.sh?ref=python-controller" \
+  "https://api.github.com/repos/Irbis3D/MedusaHC-Control/contents/install-online.sh?ref=main" \
   | sudo env GH_TOKEN="$GH_TOKEN" bash
 unset GH_TOKEN
 ```
@@ -94,10 +94,10 @@ The public one-command equivalents are:
 
 ```bash
 # Update while preserving settings and statistics
-curl -fsSL https://raw.githubusercontent.com/Irbis3D/MedusaHC-Control/python-controller/install-online.sh | sudo bash -s -- update
+curl -fsSL https://raw.githubusercontent.com/Irbis3D/MedusaHC-Control/main/install-online.sh | sudo bash -s -- update
 
 # Remove the application, integration and all dashboard-owned persistent data
-curl -fsSL https://raw.githubusercontent.com/Irbis3D/MedusaHC-Control/python-controller/install-online.sh | sudo bash -s -- uninstall --purge
+curl -fsSL https://raw.githubusercontent.com/Irbis3D/MedusaHC-Control/main/install-online.sh | sudo bash -s -- uninstall --purge
 ```
 
 ## Files owned by the installer

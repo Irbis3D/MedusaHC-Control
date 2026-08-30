@@ -31,6 +31,7 @@ testing hardware and the time needed to maintain the project.
 This is an early working prototype. It has been tested on a DuCR10 with six
 rear-mounted MedusaHC tools, but the interface itself is not limited to six
 tools. It reads the configured tool count from
+`_GLOBAL_STATE.variable_max_tool` or the legacy
 `GLOBAL_STATE.variable_max_tool` each time it starts and creates the required
 tool cards and settings automatically.
 
@@ -38,9 +39,11 @@ Support for different printers and MedusaHC layouts is still being developed.
 The panel expects an already installed and working MedusaHC configuration. It
 does not yet provide the complete setup wizard planned for future versions.
 
-This edition of MedusaHC Control supports the Python-script-based MedusaHC
-controller. It never installs, replaces or removes the controller,
-`MHC_macros.cfg` or `MHC_variables.cfg`.
+There is one MedusaHC Control edition. It supports the current Python-based
+controller and remains backward compatible with the frozen macro controller.
+Hidden configuration macros are detected automatically; users do not need to
+rename existing sections. The panel never installs, replaces, or removes the
+controller, `MHC_macros.cfg`, or `MHC_variables.cfg`.
 
 ## What it can do
 
@@ -82,7 +85,7 @@ printer backup.
 
 - An existing Linux Klipper installation with Moonraker and MedusaHC.
 - Python 3.9 or newer.
-- A working `GLOBAL_STATE` MedusaHC macro.
+- A working `_GLOBAL_STATE` or legacy `GLOBAL_STATE` MedusaHC macro.
 - SSH access with `sudo` permission for installation.
 
 The installer detects common CB2 and Raspberry Pi installations instead of
@@ -93,7 +96,7 @@ using paths tied to the `biqu` user.
 For the full installation menu, open an SSH terminal on the printer and run:
 
 ```bash
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/Irbis3D/MedusaHC-Control/python-controller/install-manager.sh)"
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/Irbis3D/MedusaHC-Control/main/install-manager.sh)"
 ```
 
 The menu manages only the optional MedusaHC Mainsail integration: it can
@@ -105,7 +108,7 @@ the exact diff and asks for separate approval.
 To install only the standalone control panel, use:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Irbis3D/MedusaHC-Control/python-controller/install-online.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/Irbis3D/MedusaHC-Control/main/install-online.sh | sudo bash
 ```
 
 The installer finds the Klipper and `printer_data` directories and creates a
@@ -136,7 +139,7 @@ Control** from the normal Update Manager page in Mainsail.
 The SSH update command is also available:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Irbis3D/MedusaHC-Control/python-controller/install-online.sh | sudo bash -s -- update
+curl -fsSL https://raw.githubusercontent.com/Irbis3D/MedusaHC-Control/main/install-online.sh | sudo bash -s -- update
 ```
 
 Updates keep the panel configuration, statistics, recent setting values and
@@ -147,7 +150,7 @@ installer backups.
 To remove the panel and all data created by it:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Irbis3D/MedusaHC-Control/python-controller/install-online.sh | sudo bash -s -- uninstall --purge
+curl -fsSL https://raw.githubusercontent.com/Irbis3D/MedusaHC-Control/main/install-online.sh | sudo bash -s -- uninstall --purge
 ```
 
 The uninstaller removes the service, application files and installer-managed
