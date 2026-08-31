@@ -1,5 +1,8 @@
 # MedusaHC Control
 
+> [!IMPORTANT]
+> **[Installation, updates, removal, and manual setup](INSTALLATION.md)**
+
 MedusaHC Control is a local web control panel for a MedusaHC toolchanger. It
 runs on the printer host next to Klipper, Moonraker and Mainsail and opens on a
 separate port. It does not replace Mainsail: the panel provides one place for
