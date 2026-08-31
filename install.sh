@@ -103,7 +103,14 @@ detect_paths() {
   config_dir="${MEDUSAHC_CONFIG_DIR:-${install_home}/printer_data/config}"
   printer_data_dir="$(dirname -- "${config_dir}")"
   printer_cfg="${config_dir}/printer.cfg"
-  variables_cfg="${config_dir}/MHC_variables.cfg"
+  core_config_dir="${config_dir}/MedusaHC"
+  if [[ -f "${core_config_dir}/MHC_variables.cfg" ]]; then
+    variables_cfg="${core_config_dir}/MHC_variables.cfg"
+    core_macros_cfg="${core_config_dir}/MHC_macros.cfg"
+  else
+    variables_cfg="${config_dir}/MHC_variables.cfg"
+    core_macros_cfg="${config_dir}/MHC_macros.cfg"
+  fi
   managed_cfg="${config_dir}/medusahc_control.cfg"
   moonraker_cfg="${config_dir}/moonraker.conf"
   moonraker_update_cfg="${config_dir}/medusahc-control-update.cfg"
@@ -115,6 +122,18 @@ detect_paths() {
   klipper_extras="${klipper_dir}/klippy/extras"
   [[ -d "${klipper_extras}" ]] || die "Klipper extras were not found at ${klipper_extras}. Set MEDUSAHC_KLIPPER_DIR."
   adapter_target="${klipper_extras}/mhc_dashboard.py"
+}
+
+require_core() {
+  local missing=()
+  [[ -f "${variables_cfg}" ]] || missing+=("MHC_variables.cfg")
+  [[ -f "${klipper_extras}/pin_watch.py" ]] || missing+=("pin_watch.py")
+  if [[ ! -f "${klipper_extras}/medusahc.py" && ! -f "${core_macros_cfg}" ]]; then
+    missing+=("medusahc.py or MHC_macros.cfg")
+  fi
+  if (( ${#missing[@]} > 0 )); then
+    die "MedusaHC Core is incomplete (missing: ${missing[*]}). Install and configure Core before MedusaHC Control."
+  fi
 }
 
 read_configured_port() {
@@ -617,6 +636,7 @@ backup_integration() {
 install_or_update() {
   require_root
   detect_paths
+  require_core
   check_sources
   check_print_idle
   choose_port
@@ -707,6 +727,10 @@ load_manifest() {
 uninstall_application() {
   require_root
   load_manifest
+  if [[ -f /var/lib/medusahc-installer/manifest.json ]] \
+      && grep -Eq '"installed"[[:space:]]*:[[:space:]]*true' /var/lib/medusahc-installer/manifest.json; then
+    die "MedusaHC Mainsail is still installed. Remove it before removing MedusaHC Control."
+  fi
   check_print_idle
   if [[ "${config_mode}" == "manual" ]] && grep -Eq '^[[:space:]]*\[include[[:space:]]+medusahc_control\.cfg\][[:space:]]*$' "${printer_cfg}"; then
     die "Manual config mode is active. Remove [include medusahc_control.cfg] from printer.cfg, restart Klipper, then run uninstall again."

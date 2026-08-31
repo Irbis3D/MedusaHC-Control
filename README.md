@@ -93,19 +93,9 @@ using paths tied to the `biqu` user.
 
 ## Install
 
-For the full installation menu, open an SSH terminal on the printer and run:
-
-```bash
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/Irbis3D/MedusaHC-Control/main/install-manager.sh)"
-```
-
-The menu manages only the optional MedusaHC Mainsail integration: it can
-replace the main Mainsail, install the modified Mainsail in parallel, show its
-status, or remove it and restore the previous Mainsail. It never installs,
-updates, or removes MedusaHC Control. Before every Moonraker change it prints
-the exact diff and asks for separate approval.
-
-To install only the standalone control panel, use:
+MedusaHC Control requires an installed and configured MedusaHC Core. The
+installer checks that dependency and stops with a clear message if it is
+missing. Install the standalone panel with:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Irbis3D/MedusaHC-Control/main/install-online.sh | sudo bash
