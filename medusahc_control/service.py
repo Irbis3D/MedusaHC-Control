@@ -440,9 +440,6 @@ class ControlService:
                 self._state = self._simulator.snapshot()
         else:
             assert self._moonraker is not None
-            self._send_setting(definition, numeric)
-            self._remember_runtime_setting(definition, numeric)
-            self._apply_active_offset(definition, state)
             if mode == "permanent":
                 if not self._config_store or not self._config_store.available:
                     raise SafetyError("Printer configuration files are not available to the dashboard")
@@ -451,7 +448,24 @@ class ControlService:
                         f"SAVE_VARIABLE VARIABLE={definition['saved_variable']} VALUE={numeric}"
                     )
                 else:
-                    self._config_store.save_permanent(definition, numeric)
+                    try:
+                        self._config_store.save_permanent(definition, numeric)
+                    except OSError as exc:
+                        raise SafetyError(
+                            "Configuration was not saved or applied: %s. "
+                            "Update MedusaHC Control to repair backup directory permissions."
+                            % exc
+                        ) from exc
+            try:
+                self._send_setting(definition, numeric)
+                self._remember_runtime_setting(definition, numeric)
+                self._apply_active_offset(definition, state)
+            except MoonrakerError as exc:
+                if mode == "permanent":
+                    raise SafetyError(
+                        "Value was saved, but applying it to Klipper failed: %s" % exc
+                    ) from exc
+                raise
         self.database.record_setting(key, numeric, mode)
         self.database.record(
             "setting_changed",

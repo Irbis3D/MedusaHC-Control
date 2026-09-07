@@ -623,6 +623,9 @@ write_manifest() {
 }
 
 backup_integration() {
+  # The service writes per-setting backups here. Repair ownership left by
+  # older root-run installers without changing private installation archives.
+  run install -d -m 0750 -o "${install_user}" -g "${install_group}" "${STATE_DIR}/backups"
   backup_dir="${STATE_DIR}/backups/install-$(date +%Y%m%d-%H%M%S)"
   run install -d -m 0700 "${backup_dir}"
   if [[ "${dry_run}" -eq 0 ]]; then

@@ -365,11 +365,25 @@ function confirmPermanentSetting(key) {
   $("#confirm-dialog").showModal();
 }
 
-async function loadSettings() {
+function settingsRefreshAllowed() {
+  const view = $(".view.active");
+  if (!view || !["view-tuning", "view-printer-settings"].includes(view.id)) return false;
+  if (app.reorderPage || $("dialog[open]") || view.contains(document.activeElement) && document.activeElement.matches("input, select")) return false;
+  return $$("[data-setting-input]", view).every(input =>
+    String(input.value) === String(app.settings?.values?.[input.dataset.settingInput] ?? ""));
+}
+
+let settingsRefreshBusy = false;
+async function loadSettings({background = false} = {}) {
+  if (settingsRefreshBusy || background && !settingsRefreshAllowed()) return;
+  settingsRefreshBusy = true;
   try {
-    app.settings = await api("/api/settings");
+    const payload = await api("/api/settings");
+    if (background && !settingsRefreshAllowed()) return;
+    app.settings = payload;
     renderSettings(app.settings);
-  } catch (error) { toast(error.message, true); }
+  } catch (error) { if (!background) toast(error.message, true); }
+  finally { settingsRefreshBusy = false; }
 }
 
 function renderSettings(payload) {
@@ -417,7 +431,7 @@ function renderSettings(payload) {
       : null;
     const configuredLabel = configuredChoice?.label ?? definition.configured_value;
     const temporaryValueActive = hasConfiguredValue && value !== "" && Number(value) !== Number(definition.configured_value);
-    const configured = hasConfiguredValue ? `<p class="configured-value ${temporaryValueActive ? "changed" : ""}">${temporaryValueActive ? "Temporary value active · " : ""}Saved config: <strong>${escapeHtml(configuredLabel)}</strong></p>` : "";
+    const configured = hasConfiguredValue ? `<p class="configured-value ${temporaryValueActive ? "changed" : ""}">${temporaryValueActive ? "Running value differs · " : ""}Saved config: <strong>${escapeHtml(configuredLabel)}</strong></p>` : "";
     const reorderAttributes = reorderEnabled ? ` draggable="true" aria-grabbed="false"` : "";
     return `<div class="setting-row ${available ? "" : "setting-row-unavailable"} ${reorderEnabled ? "reorder-enabled" : ""}"${reorderAttributes} data-layout-key="${escapeHtml(definition.layout_key)}">${variableHeader}<div class="setting-control">${input}<button data-setting-mode="runtime" data-setting-key="${escapeHtml(definition.key)}" ${runtimeDisabled}>Apply</button><button class="reset" data-setting-reset="${escapeHtml(definition.key)}" title="Apply the value currently stored in the printer configuration" ${resetDisabled}>Reset</button><button class="permanent" data-setting-mode="permanent" data-setting-key="${escapeHtml(definition.key)}" ${fileDisabled}>Save to config</button></div>${configured}${unavailable}${historyPanel}</div>`;
   };
@@ -442,7 +456,8 @@ function renderSettings(payload) {
     Cleaning: "Brush pattern, cleaning speed and final retract for this tool.",
     Offsets: "XYZ correction applied when this tool is mounted.",
   };
-  const discoveryWarning = payload.discovery_warning ? `<section class="setup-warning settings-discovery-warning"><strong>Variables unavailable</strong><span>${escapeHtml(payload.discovery_warning)}</span></section>` : "";
+  const discoveryWarning = (payload.discovery_warning ? `<section class="setup-warning settings-discovery-warning"><strong>Variables unavailable</strong><span>${escapeHtml(payload.discovery_warning)}</span></section>` : "")
+    + `<p class="muted">Fields show running Klipper values. Saved config shows stored values. After editing the configuration file directly, restart Klipper while idle to load it. Apply changes the running variable; Save to config stores it and then applies it.</p>`;
   const toolPanel = tools.length ? `<section class="settings-group tool-settings-group"><div class="tool-settings-heading"><div><span class="kicker">SELECT ACTIVE PROFILE</span><h3>Tool-specific tuning</h3><p>Only the selected tool is shown below.</p></div><div class="tool-tabs" aria-label="Tool profile">${tools.map(tool => `<button class="${tool === app.settingsTool ? "active" : ""}" data-settings-tool="${tool}">T${tool}</button>`).join("")}</div></div><div class="selected-tool-banner"><strong>T${app.settingsTool}</strong><span>Editing priming, cleaning and offset values for tool T${app.settingsTool}</span></div><div class="tuning-category-grid">${Object.entries(categories).map(([category, definitions]) => `<section class="setting-category category-${category.toLowerCase().replaceAll(" ", "-")}"><div class="setting-category-heading"><div><span class="category-marker"></span><h4>${escapeHtml(category)}</h4></div><p>${escapeHtml(categoryDescriptions[category] || "")}</p></div><div class="settings-grid">${definitions.map(row).join("")}</div></section>`).join("")}</div></section>` : "";
   if (app.settingsPage === "tuning") {
     const sharedTuning = general ? `<div class="global-tuning-groups">${general}</div>` : "";
@@ -899,4 +914,5 @@ loadState();
 loadStats();
 loadCamera();
 setInterval(loadState, 900);
+setInterval(() => loadSettings({background: true}), 3000);
 setInterval(() => { if ($("#view-statistics").classList.contains("active")) loadStats(); }, 5000);

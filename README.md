@@ -149,6 +149,20 @@ pending actions. A command already sent to Klipper is not cancelled by switching
 to passive mode. Calibration activity blocks manual motion, and command errors
 are shown on the toolhead card.
 
+Settings fields show live Klipper macro values; `Saved config` is read from
+the variables file (or saved offsets). Editing a configuration file does not
+reload it into Klipper: restart Klipper while idle. Open settings pages refresh
+every three seconds without replacing unsent edits. `Apply` changes only the
+running variable; `Save to config` first backs up and saves the file, then
+applies the value. If file saving fails, the running value is left unchanged.
+The current multiplier still requires saving and a Klipper restart as described
+in the Core configuration.
+
+If an older installation reports permission denied under
+`/var/lib/medusahc-control/backups`, run the Control installer with `update`.
+It repairs ownership of that directory for the panel service user while keeping
+private installation backup subdirectories intact.
+
 ## Uninstall
 
 To remove the panel and all data created by it:
