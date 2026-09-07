@@ -151,8 +151,7 @@ variable_t0_off_x: 0.125
         by_key = {item["key"]: item for item in schema}
         self.assertTrue(by_key["eddy_z"]["available"])
         self.assertFalse(by_key["eddy_z"]["default_visible"])
-        self.assertTrue(by_key["global_clean_feedrate"]["available"])
-        self.assertFalse(by_key["global_clean_feedrate"]["default_visible"])
+        self.assertFalse(any(item["variable"] in {"clean_speed", "clean_feedrate"} for item in schema))
         self.assertTrue(by_key["t0_prime_amount"]["default_visible"])
 
     def test_permanent_replacement_preserves_comment(self) -> None:

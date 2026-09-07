@@ -255,7 +255,7 @@ class Simulator:
             "gcode_macro GLOBAL_STATE": {
                 "max_tool": tool_count, "target_tool": -1, "feeder_open": 0,
                 "eddy_z": -0.09, "fast_feedrate": 30000,
-                "slow_feedrate": 2400, "clean_feedrate": 3000,
+                "slow_feedrate": 2400,
             },
             "gcode_macro TOOL_CFG": {
                 "tools_direction": -1,
@@ -268,7 +268,6 @@ class Simulator:
                 "fast_accel": 10000,
                 "fast_speed": 500,
                 "slow_speed": 40,
-                "clean_speed": 50,
                 "e_open": -5.0,
                 "e_close": 3.0,
                 "servo_open_angle": 180,

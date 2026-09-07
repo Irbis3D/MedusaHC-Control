@@ -16,7 +16,6 @@ BASE_SETTINGS: tuple[dict[str, Any], ...] = (
     {"key": "fast_accel", "macro": "TOOL_CFG", "variable": "fast_accel", "label": "Toolchange acceleration", "group": "Motion", "unit": "mm/s²", "min": 100, "max": 40000, "step": 100},
     {"key": "fast_speed", "macro": "TOOL_CFG", "variable": "fast_speed", "label": "Fast movement", "group": "Motion", "unit": "mm/s", "min": 1, "max": 600, "step": 1, "runtime_targets": [{"macro": "GLOBAL_STATE", "variable": "fast_feedrate", "multiplier": 60}]},
     {"key": "slow_speed", "macro": "TOOL_CFG", "variable": "slow_speed", "label": "Docking movement", "group": "Motion", "unit": "mm/s", "min": 1, "max": 200, "step": 1, "runtime_targets": [{"macro": "GLOBAL_STATE", "variable": "slow_feedrate", "multiplier": 60}]},
-    {"key": "clean_speed", "macro": "TOOL_CFG", "variable": "clean_speed", "label": "Brush movement", "group": "Motion", "unit": "mm/s", "min": 1, "max": 300, "step": 1, "runtime_targets": [{"macro": "GLOBAL_STATE", "variable": "clean_feedrate", "multiplier": 60}]},
     {"key": "e_open", "macro": "TOOL_CFG", "variable": "e_open", "label": "Feeder open movement", "group": "Feeder", "unit": "mm", "min": -30, "max": 30, "step": 0.1},
     {"key": "e_close", "macro": "TOOL_CFG", "variable": "e_close", "label": "Feeder close movement", "group": "Feeder", "unit": "mm", "min": -30, "max": 30, "step": 0.1},
     {"key": "servo_open_angle", "macro": "TOOL_CFG", "variable": "servo_open_angle", "label": "Servo open angle", "group": "Feeder", "unit": "°", "min": 0, "max": 180, "step": 1},
@@ -111,6 +110,11 @@ def schema_for(
     discovery_error: str = "",
 ) -> list[dict[str, Any]]:
     """Build a stable machine schema plus discovered tool process variables."""
+    if discovered is not None:
+        # Retained printer configs may still contain obsolete shared speeds.
+        discovered = {key: value for key, value in discovered.items()
+                      if key not in {("TOOL_CFG", "clean_speed"),
+                                     ("GLOBAL_STATE", "clean_feedrate")}}
     setup_groups = {"Layout", "Feeder", "Calibration", "Cleaning and priming", "Motion"}
     schema = [
         _with_availability(
@@ -154,6 +158,8 @@ def schema_for(
                     continue
                 template = dict(known.get(variable, {"variable": variable, "category": category or "Other", "step": 0.1}))
                 template["description"] = str(metadata.get("description", ""))
+                if variable == "clean_move_speed":
+                    template["description"] = "Brush crossing speed for this tool, in mm/s. Used by CLEAN and cleaning after pickup."
                 definition = _tool_definition(tool, template, available=True)
                 definition["configured_value"] = metadata.get("numeric_value")
                 definition["source_macro"] = metadata.get("source_macro", macro)

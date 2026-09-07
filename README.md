@@ -163,6 +163,11 @@ If an older installation reports permission denied under
 It repairs ownership of that directory for the panel service user while keeping
 private installation backup subdirectories intact.
 
+Brush crossing speed is `clean_move_speed` in each `_TOOL_STATE_n` profile.
+The retired shared `clean_speed` and `clean_feedrate` are no longer offered,
+even if retained configuration files still contain them. PTFE passes retain
+the separate per-tool `ptfe_clean_slow_speed`.
+
 ## Uninstall
 
 To remove the panel and all data created by it:
