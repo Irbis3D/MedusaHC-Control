@@ -138,6 +138,17 @@ curl -fsSL https://raw.githubusercontent.com/Irbis3D/MedusaHC-Control/main/insta
 Updates keep the panel configuration, statistics, recent setting values and
 installer backups.
 
+The existing `medusahc_control.cfg` adapter configuration is preserved on
+update and uninstall. Uninstall removes its managed include; reinstall can
+reuse the retained file. Without `--purge`, panel settings and statistics also
+remain in `/var/lib/medusahc-control`.
+
+Queued actions are checked against fresh printer state before execution.
+Disabling control, restarting, emergency stop, or a failed queued action cancels
+pending actions. A command already sent to Klipper is not cancelled by switching
+to passive mode. Calibration activity blocks manual motion, and command errors
+are shown on the toolhead card.
+
 ## Uninstall
 
 To remove the panel and all data created by it:

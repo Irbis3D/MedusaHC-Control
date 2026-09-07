@@ -97,7 +97,12 @@ def normalize_status(status: dict[str, Any]) -> dict[str, Any]:
     ready = klipper_state == "ready"
     printing = print_state in {"printing", "paused"}
     sensor_error = current_tool == -2
-    can_move = ready and not printing and not sensor_error
+    calibration = status.get("medusahc_calibrate", {}) or {}
+    operation = str(calibration.get("operation", "idle"))
+    if operation == "idle":
+        operation = str(pin_watch.get("operation", "idle"))
+    idle = operation == "idle"
+    can_move = ready and not printing and not sensor_error and idle
     available_macros = {
         name.removeprefix("gcode_macro ")
         for name in status
@@ -127,8 +132,8 @@ def normalize_status(status: dict[str, Any]) -> dict[str, Any]:
         "target_tool": int(pin_watch.get("target_tool", global_state.get("target_tool", -1))),
         "sensor_error": sensor_error,
         "feeder_open": bool(pin_watch.get("feeder_open", global_state.get("feeder_open", 0))),
-        "operation": str(pin_watch.get("operation", "idle")),
-        "last_error": str(pin_watch.get("last_error", "")),
+        "operation": operation,
+        "last_error": str(calibration.get("last_error") or pin_watch.get("last_error", "")),
         "tools": tools,
         "sensors": {str(key): int(value) for key, value in raw_sensors.items()},
         "settings": settings,
@@ -137,13 +142,13 @@ def normalize_status(status: dict[str, Any]) -> dict[str, Any]:
         "available_macros": sorted(available_macros),
         "saved_variables": _numeric_variables(saved_values),
         "capabilities": {
-            "can_home": ready and not printing,
-            "can_jog": ready and not printing,
+            "can_home": ready and not printing and idle,
+            "can_jog": ready and not printing and idle,
             "can_heat": ready,
             "can_select": can_move,
             "can_drop": can_move and current_tool >= 0,
             "can_clean": can_move and current_tool >= 0,
-            "can_feeder": ready and not printing,
+            "can_feeder": ready and not printing and idle,
             "can_calibrate": can_move,
             "can_calibrate_touch": can_move and bool(
                 {"CALIBRATE_XYZ_TOUCH", "CALIBRATE_AND_SAVE_OFFSETS"} & available_macros
@@ -152,7 +157,7 @@ def normalize_status(status: dict[str, Any]) -> dict[str, Any]:
             "can_calibrate_z_eddy": can_move and bool(
                 {"CALIBRATE_Z_EDDY", "TOOL_Z_CALIBRATION"} & available_macros
             ),
-            "can_edit": ready and not printing,
+            "can_edit": ready and not printing and idle,
             "can_system": True,
         },
         "message": _state_message(current_tool, sensor_error),

@@ -66,6 +66,7 @@ class MoonrakerClient:
             "toolchanger",
             "pin_watch io",
             "mhc_dashboard",
+            "medusahc_calibrate",
             "medusahc",
             "save_variables",
             "gcode_macro TOOL_CFG",

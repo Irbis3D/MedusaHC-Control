@@ -74,7 +74,9 @@ class ControlService:
             )
         self._stop = threading.Event()
         self._poll_thread: threading.Thread | None = None
-        self._command_queue: queue.Queue[tuple[str, str, int | None]] = queue.Queue(maxsize=32)
+        self._command_queue: queue.Queue[tuple[str, str, int | None, int]] = queue.Queue(maxsize=32)
+        self._command_generation = 0
+        self._last_command_error = ""
         self._command_thread: threading.Thread | None = None
 
     def start(self) -> None:
@@ -88,6 +90,7 @@ class ControlService:
 
     def stop(self) -> None:
         self._stop.set()
+        self._cancel_pending_commands()
         if self._poll_thread is not None:
             self._poll_thread.join(timeout=3.0)
         if self._command_thread is not None:
@@ -98,19 +101,43 @@ class ControlService:
         assert self._moonraker is not None
         while not self._stop.is_set():
             try:
-                action, script, tool = self._command_queue.get(timeout=0.25)
+                action, script, tool, generation = self._command_queue.get(timeout=0.25)
             except queue.Empty:
                 continue
             try:
+                fresh = normalize_status(self._moonraker.query_status())
+                with self._state_lock:
+                    if generation != self._command_generation or not self._control_active or self._stop.is_set():
+                        raise SafetyError("Pending command cancelled")
+                    if not fresh.get("capabilities", {}).get(ACTION_CAPABILITY[action], False):
+                        raise SafetyError(self._safety_reason(action, fresh))
+                    if tool is not None and tool >= fresh.get("tool_count", 0):
+                        raise SafetyError("Tool number is outside the configured range")
                 self._moonraker.send_gcode(script, timeout=3600.0)
+                with self._state_lock:
+                    self._last_command_error = ""
                 self.database.record("command_completed", tool=tool, details={"action": action})
-            except MoonrakerError as exc:
+            except Exception as exc:
+                with self._state_lock:
+                    if generation == self._command_generation:
+                        self._cancel_pending_commands()
+                    self._last_command_error = str(exc)
                 LOG.error("Queued command %s failed: %s", action, exc)
                 self.database.record(
                     "command_failed", tool=tool, success=False,
                     details={"action": action, "error": str(exc)},
                 )
             finally:
+                self._command_queue.task_done()
+
+    def _cancel_pending_commands(self) -> None:
+        with self._state_lock:
+            self._command_generation += 1
+            while True:
+                try:
+                    self._command_queue.get_nowait()
+                except queue.Empty:
+                    break
                 self._command_queue.task_done()
 
     def _poll_loop(self) -> None:
@@ -138,6 +165,7 @@ class ControlService:
         with self._state_lock:
             state = deepcopy(self._state)
             active = bool(self._control_active)
+            state["last_error"] = state.get("last_error") or self._last_command_error
         state["control_available"] = bool(self._simulator is not None or self.config.allow_commands)
         state["control_enabled"] = active
         if not active:
@@ -151,6 +179,8 @@ class ControlService:
             raise SafetyError("Live control is disabled in medusahc-control.json")
         with self._state_lock:
             self._control_active = bool(enabled)
+            if not enabled:
+                self._cancel_pending_commands()
         self.database.record(
             "control_mode",
             details={"enabled": bool(enabled), "simulated": self._simulator is not None},
@@ -313,7 +343,9 @@ class ControlService:
         }
 
     def execute(self, action: str, payload: dict[str, Any]) -> dict[str, Any]:
-        state = self.state()
+        with self._state_lock:
+            state = self.state()
+            generation = self._command_generation
         if not state.get("control_enabled") and not (
             action == "emergency_stop" and state.get("control_available")
         ):
@@ -355,6 +387,8 @@ class ControlService:
             self._simulator.execute(action, payload)
         else:
             assert self._moonraker is not None
+            if action in {"emergency_stop", "restart_klipper", "restart_firmware", "reboot_device"}:
+                self._cancel_pending_commands()
             if action == "emergency_stop":
                 self._announce(action, payload)
                 self._moonraker.emergency_stop()
@@ -369,7 +403,10 @@ class ControlService:
                 self._moonraker.reboot_device()
             elif action in QUEUED_ACTIONS:
                 try:
-                    self._command_queue.put_nowait((action, self._console_gcode(action, payload, state), tool))
+                    with self._state_lock:
+                        if generation != self._command_generation or not self._control_active:
+                            raise SafetyError("Pending command cancelled")
+                        self._command_queue.put_nowait((action, self._console_gcode(action, payload, state), tool, generation))
                 except queue.Full as exc:
                     raise SafetyError("The printer command queue is full") from exc
                 queued = True
@@ -554,6 +591,8 @@ class ControlService:
             return "Manual MedusaHC movement is blocked while a print is active or paused"
         if state.get("sensor_error"):
             return "Tool sensors report an ambiguous state"
+        if state.get("operation", "idle") != "idle":
+            return "A tool change or calibration is already running"
         return "The action is blocked by the current printer state"
 
     @staticmethod

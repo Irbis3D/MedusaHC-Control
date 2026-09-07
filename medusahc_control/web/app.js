@@ -191,7 +191,9 @@ function renderToolhead(state) {
   feederIndicator.classList.toggle("open", Boolean(state.feeder_open));
   $("#feeder-indicator-label").textContent = state.feeder_open ? "OPEN" : "CLOSED";
   $("#quick-tool-number").textContent = active ? active.name : "—";
-  $("#quick-tool-copy").textContent = active ? `${active.name} is mounted and ready for manual operations.` : state.message;
+  $("#quick-tool-copy").textContent = state.last_error
+    || (state.operation && state.operation !== "idle" ? `In progress: ${state.operation}`
+      : active ? `${active.name} is mounted.` : state.message);
 }
 
 function renderRack(state) {

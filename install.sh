@@ -330,6 +330,10 @@ PY
 }
 
 write_dashboard_cfg() {
+  if [[ -f "${managed_cfg}" ]]; then
+    log "Keeping existing adapter configuration: ${managed_cfg}"
+    return
+  fi
   cp "${SCRIPT_DIR}/printer/medusahc_control.cfg" "${managed_cfg}"
   chown "${install_user}:${install_group}" "${managed_cfg}"
   chmod 0644 "${managed_cfg}"
@@ -744,9 +748,6 @@ uninstall_application() {
     systemctl disable --now "${APP_NAME}.service" >/dev/null 2>&1 || true
     if [[ "${config_mode}" == "managed" && -f "${printer_cfg}" ]]; then
       remove_managed_include
-      rm -f "${managed_cfg}"
-    elif [[ "${config_mode}" == "manual" ]]; then
-      rm -f "${managed_cfg}"
     fi
     if [[ "${adapter_mode}" == "managed" && -L "${adapter_target}" ]]; then
       rm -f "${adapter_target}"
